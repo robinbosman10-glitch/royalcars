@@ -95,3 +95,16 @@ body::after{content:'';position:fixed;inset:0;background:linear-gradient(90deg,#
 .login-page{background:transparent}.login-form{background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
 .preview-banner{background:#0a0b0fcc;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#e4cb9b}
 @media(max-width:760px){body::before{background-position:64% 40%}.page-heading{padding:19px 18px}.main{padding:20px 15px}.page-heading h1{font-size:23px}.hero-copy{padding:22px}}
+@media(min-width:761px){
+ .roster-grid:has(>.royal-member:only-child){grid-template-columns:1fr}
+ .royal-member:only-child{display:grid;grid-template-columns:90px minmax(0,1fr) minmax(150px,210px);grid-template-areas:'top top top' 'portrait identity details' 'portrait rank details';column-gap:25px;padding:0 24px 24px}
+ .royal-member:only-child .member-card-top{grid-area:top;padding:14px 0 17px}
+ .royal-member:only-child .member-portrait{grid-area:portrait;margin:0}
+ .royal-member:only-child .member-identity{grid-area:identity;text-align:left;margin:2px 0 0}
+ .royal-member:only-child .member-identity h4{font-size:25px;letter-spacing:-.8px}
+ .royal-member:only-child .member-identity p{font-size:11px}
+ .royal-member:only-child .member-rank-label{grid-area:rank;text-align:left;margin:10px 0 0;font-size:9px}
+ .royal-member:only-child .member-card-bottom{grid-area:details;display:block;padding:5px 0 5px 24px;border-top:0;border-left:1px solid var(--line);background:transparent}
+ .royal-member:only-child .member-card-bottom strong{font-size:12px;margin:4px 0 11px}
+ .royal-member:only-child .member-card-bottom button{font-size:8px;gap:7px}
+}
