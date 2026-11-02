@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Store } from '../lib/store.mjs';
+import { hashPassword, verifyPassword, bootstrapOwner } from '../lib/passwords.mjs';
 import { createApp, configuration } from '../server.mjs';
 import { accessFor, allowedLogSources, createOperationRunner, validateSettings, validateAction } from '../lib/security.mjs';
 
@@ -9,28 +10,27 @@ const member = '222222222222222222';
 const target = '333333333333333333';
 const env = { NODE_ENV: 'test', APP_URL: 'http://localhost', OWNER_DISCORD_ID: owner, DISCORD_GUILD_ID: '444444444444444444', DISCORD_CLIENT_ID: '555555555555555555', DISCORD_CLIENT_SECRET: 'fake-secret', DISCORD_TOKEN: 'fake-token', SESSION_SECRET: 'test-secret-must-be-at-least-32-characters' };
 const bot = { status: () => ({ online: false, configured: true }), getMembers: async () => ({ members: [], ranks: [], updatedAt: null }), getCatalog: async () => ({ roles: [], channels: [] }) };
-const response = data => ({ ok: true, status: 200, json: async () => data });
+// Fictitious test credentials; never used in production.
+const testPassword = 'Test-only-password-123!';
+const testHash = await hashPassword(testPassword);
 
 async function harness(t, profileId = owner, service = bot) {
-  const store = new Store(); let tokenRequest;
-  const fetchImpl = async (url, init) => {
-    if (url.endsWith('/oauth2/token')) { tokenRequest = init; return response({ access_token: 'fake-user-token' }); }
-    if (url.endsWith('/users/@me')) return response({ id: profileId, username: 'test', global_name: 'Test User' });
-    return response({ user: { id: profileId } });
-  };
-  const app = createApp({ store, bot: service, env, fetchImpl });
+  const store = new Store();
+  store.setCredential({ id: owner, username: 'owner.test', passwordHash: testHash, mustChangePassword: false });
+  if(profileId !== owner) store.setCredential({ id: profileId, username: 'member.test', passwordHash: testHash, mustChangePassword: false });
+  const app = createApp({ store, bot: service, env });
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   t.after(() => new Promise(resolve => server.close(() => { store.close(); resolve(); })));
   const request = (path, options = {}) => fetch(`${base}${path}`, { redirect: 'manual', ...options });
   const login = async () => {
-    const start = await request('/auth/discord');
-    const authorization = new URL(start.headers.get('location'));
-    const state = authorization.searchParams.get('state');
+    const start = await request('/api/session');
+    const preauth = await start.json();
     let cookie = start.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-    const callback = await request(`/auth/discord/callback?state=${state}&code=fake-code`, { headers: { Cookie: cookie } });
+    const callback = await request('/auth/login', { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json', 'X-CSRF-Token': preauth.csrfToken }, body: JSON.stringify({ username: profileId === owner ? 'owner.test' : 'member.test', password: testPassword }) });
+    const data = await callback.json();
     const newCookie = callback.headers.getSetCookie().map(value => value.split(';')[0]).join('; '); if (newCookie) cookie = newCookie;
-    return { cookie, callback, authorization, tokenRequest };
+    return { cookie, callback, data, originalCookie: start.headers.getSetCookie()[0]?.split(';')[0] };
   };
   return { store, request, login };
 }
@@ -102,17 +102,15 @@ test('audit-storage failure after applying roles preserves safe retry state', as
   store.close();
 });
 
-test('OAuth validates state, uses S256 PKCE and regenerates the session ID', async t => {
+test('password login rotates session ID, protects fixed owner and disables former OAuth endpoints', async t => {
   const { request, login } = await harness(t);
-  const bad = await request('/auth/discord/callback?state=wrong&code=fake');
-  assert.equal(bad.headers.get('location'), '/?error=oauth_state');
+  assert.equal((await request('/auth/discord')).headers.get('location'), '/?error=password_login');
+  assert.equal((await request('/auth/discord/callback?code=fake')).headers.get('location'), '/?error=password_login');
   const result = await login();
-  assert.equal(result.callback.headers.get('location'), '/');
-  assert.equal(result.authorization.searchParams.get('code_challenge_method'), 'S256');
-  assert.equal(result.authorization.searchParams.get('scope'), 'identify');
-  assert.equal(new URLSearchParams(result.tokenRequest.body).get('code_verifier').length, 64);
-  const state = await request('/api/session', { headers: { Cookie: result.cookie } });
-  const data = await state.json(); assert.equal(data.authenticated, true); assert.equal(data.user.isOwner, true); assert.ok(data.csrfToken);
+  assert.equal(result.callback.status, 200);
+  assert.notEqual(result.cookie, result.originalCookie);
+  assert.equal(result.data.authenticated,true);assert.equal(result.data.user.isOwner,true);
+  assert.equal(result.data.authMethod,'password');assert.ok(result.data.csrfToken);
   assert.equal((await request('/api/accounts', { headers: { Cookie: result.cookie } })).status, 200);
 });
 
@@ -135,7 +133,7 @@ test('logged-in allowlisted member cannot reach owner APIs and loses access afte
   assert.equal((await request('/api/accounts', { headers: { Cookie: cookie } })).status, 403);
   assert.equal((await request('/api/settings', { headers: { Cookie: cookie } })).status, 403);
   store.deleteAccount(member);
-  assert.equal((await request('/api/members', { headers: { Cookie: cookie } })).status, 403);
+  assert.equal((await request('/api/members', { headers: { Cookie: cookie } })).status, 401);
 });
 
 test('preview cannot access protected API and public session exposes no owner ID or tokens', async t => {
@@ -240,4 +238,83 @@ test('personnel options show only assignable allowlisted extra roles for delegat
   assert.deepEqual(options.roles.map(role=>role.id),[extra]);assert.equal(options.ranks[0].id,'dealer');
   store.saveGroup({...group,permissions:['members']});
   assert.equal((await request('/api/personnel/options',{headers:{Cookie:cookie}})).status,403);
+});
+
+test('salted password hashes differ and never accept an incorrect or malformed password',async()=>{
+  const other=await hashPassword(testPassword);
+  assert.notEqual(other,testHash);assert.equal(await verifyPassword(testPassword,other),true);
+  assert.equal(await verifyPassword('incorrect-password',other),false);
+  assert.equal(await verifyPassword('x'.repeat(1000),other),false);
+  await assert.rejects(()=>hashPassword('short'),/minimaal 12/);
+});
+
+test('owner bootstrap never overwrites a changed password and cannot create a first-visitor owner',()=>{
+  const store=new Store();
+  bootstrapOwner(store,{OWNER_DISCORD_ID:owner,OWNER_LOGIN_USERNAME:'Robin',OWNER_LOGIN_PASSWORD_HASH:testHash});
+  const initial=store.getCredential(owner);assert.equal(initial.mustChangePassword,true);assert.equal(initial.username,'Robin');
+  store.setCredential({id:owner,username:'ChangedName',passwordHash:testHash,mustChangePassword:false});
+  bootstrapOwner(store,{OWNER_DISCORD_ID:owner,OWNER_LOGIN_USERNAME:'Robin',OWNER_LOGIN_PASSWORD_HASH:testHash});
+  assert.equal(store.getCredential(owner).username,'ChangedName');assert.equal(store.getCredential(owner).mustChangePassword,false);
+  bootstrapOwner(store,{OWNER_DISCORD_ID:member,OWNER_LOGIN_USERNAME:'Wrong',OWNER_LOGIN_PASSWORD_HASH:'invalid'});
+  assert.equal(store.getCredential(member),null);store.close();
+});
+
+async function anonymous(t){
+  const h=await harness(t);const response=await h.request('/api/session');const data=await response.json();
+  const cookie=response.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ');
+  return {...h,cookie,csrf:data.csrfToken,postLogin:(username,password,extra={})=>h.request('/auth/login',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json','X-CSRF-Token':data.csrfToken,...extra},body:JSON.stringify({username,password})})};
+}
+
+test('login is CSRF protected and repeated failures are persistently limited without exposing account existence',async t=>{
+  const h=await anonymous(t);
+  assert.equal((await h.postLogin('owner.test',testPassword,{'X-CSRF-Token':''})).status,403);
+  assert.equal((await h.postLogin('owner.test',testPassword,{Origin:'https://attacker.example'})).status,403);
+  const missing=await h.postLogin('does-not-exist','incorrect-password');
+  const incorrect=await h.postLogin('owner.test','incorrect-password');
+  assert.equal(missing.status,401);assert.equal(incorrect.status,401);assert.deepEqual(await missing.json(),await incorrect.json());
+  for(let i=1;i<5;i++)assert.equal((await h.postLogin('owner.test','incorrect-password')).status,401);
+  assert.equal((await h.postLogin('owner.test',testPassword)).status,429);
+});
+
+test('temporary password must be replaced; changing it rotates the session and invalidates every old session',async t=>{
+  const {store,request,login}=await harness(t);
+  store.setCredential({id:owner,username:'owner.test',passwordHash:testHash,mustChangePassword:true});
+  const first=await login();const second=await login();assert.equal(first.data.mustChangePassword,true);
+  assert.equal((await request('/api/members',{headers:{Cookie:first.cookie}})).status,403);
+  const changed=await request('/api/account/password',{method:'POST',headers:{Cookie:first.cookie,'Content-Type':'application/json','X-CSRF-Token':first.data.csrfToken},body:JSON.stringify({username:'NewName',currentPassword:testPassword,newPassword:'A new test password phrase!'})});
+  assert.equal(changed.status,200);const data=await changed.json();assert.equal(data.mustChangePassword,false);assert.equal(data.user.loginUsername,'NewName');
+  const nextCookie=changed.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ');assert.notEqual(nextCookie,first.cookie);
+  assert.equal((await request('/api/members',{headers:{Cookie:second.cookie}})).status,401);
+  assert.equal((await request('/api/members',{headers:{Cookie:nextCookie}})).status,200);
+  assert.equal(await verifyPassword('A new test password phrase!',store.getCredential(owner).passwordHash),true);
+});
+
+test('admin credential reset logs out existing users, rejects duplicate usernames and never returns password material',async t=>{
+  const h=await harness(t);
+  h.store.saveAccount({id:member,label:'Existing Staff',permissions:['members'],logSourceIds:[],active:true});
+  h.store.setCredential({id:member,username:'staff.test',passwordHash:testHash,mustChangePassword:false});
+  const ownerSession=await h.login();const headers={Cookie:ownerSession.cookie,'Content-Type':'application/json','X-CSRF-Token':ownerSession.data.csrfToken};
+  const account={id:member,label:'Staff',permissions:['members'],logSourceIds:[],active:true,loginUsername:'staff.new',loginPassword:'New temporary password!'};
+  const duplicate=await h.request('/api/accounts',{method:'POST',headers,body:JSON.stringify({...account,loginUsername:'OWNER.TEST'})});assert.equal(duplicate.status,409);assert.equal(h.store.getAccount(member).label,'Existing Staff');
+  const weak=await h.request('/api/accounts',{method:'POST',headers,body:JSON.stringify({...account,loginPassword:'short'})});assert.equal(weak.status,400);assert.equal(h.store.getAccount(member).label,'Existing Staff');
+  const anonResponse=await h.request('/api/session');const anonData=await anonResponse.json();const anonCookie=anonResponse.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ');
+  const staffLogin=await h.request('/auth/login',{method:'POST',headers:{Cookie:anonCookie,'Content-Type':'application/json','X-CSRF-Token':anonData.csrfToken},body:JSON.stringify({username:'STAFF.TEST',password:testPassword})});assert.equal(staffLogin.status,200);await staffLogin.json();
+  const oldStaffCookie=staffLogin.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ');
+  const original=h.store.getCredential(member).version;
+  const update=await h.request('/api/accounts',{method:'POST',headers,body:JSON.stringify(account)});assert.equal(update.status,200);
+  assert.equal((await h.request('/api/members',{headers:{Cookie:oldStaffCookie}})).status,401);
+  const returned=await update.json();assert.equal(returned.account.loginUsername,'staff.new');assert.equal(returned.account.mustChangePassword,true);assert.notEqual(h.store.getCredential(member).version,original);
+  const list=await(await h.request('/api/accounts',{headers:{Cookie:ownerSession.cookie}})).json();
+  assert.ok(!JSON.stringify(list).includes('passwordHash'));assert.ok(!JSON.stringify(list).includes(account.loginPassword));assert.ok(!JSON.stringify(list).includes('scrypt$'));
+  const logs=JSON.stringify(h.store.listLogs());assert.ok(!logs.includes(account.loginPassword));assert.ok(!logs.includes('scrypt$'));
+});
+
+test('a legacy OAuth session cannot authenticate after the switch to passwords',async t=>{
+  const h=await anonymous(t);
+  const row=h.store.db.prepare('SELECT sid,data FROM sessions LIMIT 1').get();
+  const data=JSON.parse(row.data);data.user={id:owner,username:'Old owner'};data.authType='discord';
+  h.store.db.prepare('UPDATE sessions SET data=? WHERE sid=?').run(JSON.stringify(data),row.sid);
+  assert.equal((await h.request('/api/accounts',{headers:{Cookie:h.cookie}})).status,401);
+  const session=await(await h.request('/api/session',{headers:{Cookie:h.cookie}})).json();assert.equal(session.authenticated,false);
+  assert.equal((await h.request('/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,404);
 });

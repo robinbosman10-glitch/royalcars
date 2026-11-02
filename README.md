@@ -1,6 +1,6 @@
 # Royal Cars — Management Portal
 
-Een Nederlands personeelsportaal en Discord-bot voor Royal Cars, met een rood/zwart autothema, licht/donker-modus en Discord-login.
+Een Nederlands personeelsportaal en Discord-bot voor Royal Cars, met een rood/zwart autothema, licht/donker-modus en inloggen met gebruikersnaam en wachtwoord.
 
 ## Functies
 
@@ -23,18 +23,37 @@ npm ci
 npm start
 ```
 
-Zonder Discord-configuratie start de website wel; inloggen en personeelsacties blijven uitgeschakeld. Het eerste Discord-account krijgt nooit automatisch beheerdersrechten.
+De login werkt zodra het vaste Directie-account en de sessiesleutel zijn ingesteld. Zonder botconfiguratie blijven Discord-acties uitgeschakeld. Een eerste bezoeker krijgt nooit automatisch beheerdersrechten.
 
-## Discord koppelen
+## Inloggen en accounts
+
+De website gebruikt gebruikersnaam en wachtwoord. Discord OAuth-login is uitgeschakeld; bestaande Discord-sessies worden niet meer geaccepteerd. Discord-ID’s blijven gekoppeld aan de bot, de ledenlijst en personeelsacties.
+
+- Alleen het vaste account uit `OWNER_DISCORD_ID` kan accounts, inloggegevens en beheerrangen beheren.
+- Onder **Accounts** kan de Directie een gebruikersnaam en tijdelijk wachtwoord instellen. Bestaande accounts zonder inloggegevens kunnen pas inloggen nadat die zijn ingesteld.
+- Een tijdelijk wachtwoord moet bij de eerste login worden vervangen. Iedere gebruiker kan daarna via het sleutelicoon de eigen inloggegevens wijzigen.
+- Een wachtwoordwijziging of reset meldt oude sessies af. Wachtwoorden en hashes worden nooit via de API of activiteitenlogs teruggestuurd.
+- Wachtwoorden worden opgeslagen met unieke salt en scrypt (`N=32768, r=8, p=3`). Inloggen heeft sessiegebonden CSRF-controle, beperkte inlogpogingen en algemene foutmeldingen.
+- Er is geen openbare registratie of openbare wachtwoordreset.
+
+### Eerste Directie-account
+
+Stel `OWNER_LOGIN_USERNAME` en een hash in `OWNER_LOGIN_PASSWORD_HASH` in, naast het vaste `OWNER_DISCORD_ID`. Genereer de hash lokaal met:
+
+```sh
+node scripts/hash-password.mjs
+```
+
+Het script verbergt de invoer en toont uitsluitend de hash. De eerste start bewaart de login in de persistente databank en verplicht een nieuw wachtwoord. Latere starts overschrijven bestaande inloggegevens niet. Zet nooit een leesbaar wachtwoord in GitHub of hostingvariabelen.
+
+## Discord-bot koppelen
 
 Gebruik de bestaande Royal Cars-applicatie in het [Discord Developer Portal](https://discord.com/developers/applications).
 
-1. Vul de variabelen uit `.env.example` in de hostingomgeving in. Zet het bot-token en de OAuth-clientsecret uitsluitend bij de geheime hostingvariabelen, nooit in GitHub of chat.
-2. Registreer bij OAuth2 exact de callback-URL `https://royalcarsadmin.nl/auth/discord/callback`. Lokaal gebruik je `http://localhost:3000/auth/discord/callback`.
-3. Zet **Server Members Intent** aan. Schakel **Message Content Intent** in als gekoppelde logkanalen ook berichtinhoud en embeds moeten tonen.
-4. Geef de bot **Manage Roles**, **View Channels**, **Read Message History**, **Send Messages** en **Embed Links** in de betreffende kanalen. Plaats zijn hoogste rol boven alle personeelsrollen die hij moet beheren.
-5. Stel `OWNER_DISCORD_ID` in op Robins eigen Discord-gebruikers-ID en `DISCORD_GUILD_ID` op de Royal Cars-server-ID.
-6. Log als eigenaar in. Koppel de echte rangen en kanaal-ID's onder **Instellingen**, en maak toegestane accounts aan onder **Accounts**.
+1. Stel `DISCORD_TOKEN` en `DISCORD_GUILD_ID` in de hostingomgeving in. De website heeft geen Discord Client ID, clientsecret of OAuth-redirect nodig.
+2. Zet **Server Members Intent** aan. Schakel **Message Content Intent** in voor berichtinhoud en embeds uit gekoppelde logkanalen.
+3. Geef de bot **Manage Roles**, **View Channels**, **Read Message History**, **Send Messages** en **Embed Links** in de betreffende kanalen. Plaats zijn hoogste rol boven de personeelsrollen die hij moet beheren.
+4. Log in op de website en koppel de echte rangen en kanaal-ID’s onder **Instellingen**.
 
 Een demotie mag uitsluitend naar een lager ingestelde rang. Ontslaan verwijdert de geconfigureerde personeelsrollen; de bot verwijdert geen serverleden. Losse, niet ingestelde Discord-rollen blijven behouden. Het portaal verleent nooit automatisch toegang op basis van alleen een Discord-rolnaam.
 
@@ -54,7 +73,7 @@ De tests gebruiken mocks en sturen geen berichten naar een echte Discord-server.
 
 ## Relevante documentatie
 
-- [Discord OAuth2](https://docs.discord.com/developers/topics/oauth2)
+- [Wachtwoordopslag (OWASP)](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
 - [Discord Gateway](https://docs.discord.com/developers/events/gateway)
 - [Railway custom domains](https://docs.railway.com/networking/domains)
 
