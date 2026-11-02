@@ -84,3 +84,20 @@ test('successful demotion updates only configured role and notification retry de
   const roster = await service.getMembers(); assert.equal(roster.members[0].rank.name, 'Cardealer');
   await service.stop();
 });
+
+test('selected hiring roles are kept across demotion and removed at dismissal while unrelated roles survive',()=>{
+  const extra='100000000000000010';const unrelated='100000000000000011';
+  const hire=planRoleChanges({type:'hire',rankId:'manager',roleIds:new Set([unrelated]),settings:config(),extraRoleIds:[extra]});
+  assert.equal(hire.add.includes(extra),true);assert.equal(hire.add.includes(ID.high),true);
+  const demote=planRoleChanges({type:'demote',rankId:'dealer',roleIds:new Set([ID.high,ID.base,extra,unrelated]),settings:config(),trackedRoleIds:[extra]});
+  assert.deepEqual(demote.remove,[ID.high]);assert.equal(demote.add.includes(ID.low),true);
+  const dismiss=planRoleChanges({type:'dismiss',roleIds:new Set([ID.low,ID.base,extra,unrelated]),settings:config(),trackedRoleIds:[extra]});
+  assert.equal(dismiss.remove.includes(extra),true);assert.equal(dismiss.remove.includes(unrelated),false);
+  assert.throws(()=>planRoleChanges({type:'hire',rankId:'dealer',roleIds:new Set(),settings:config(),extraRoleIds:[ID.high]}),{code:'INVALID_EXTRA_ROLE'});
+});
+
+test('delegated hiring cannot grant an extra role outside the owner-configured allowlist',async()=>{
+  const {service,mutations}=fixture();await service.start();
+  await assert.rejects(service.performAction({type:'hire',discordId:ID.member,rankId:'dealer',actorId:'100000000000000099',roleIds:['100000000000000010']}),{code:'EXTRA_ROLE_FORBIDDEN'});
+  assert.deepEqual(mutations,[]);await service.stop();
+});

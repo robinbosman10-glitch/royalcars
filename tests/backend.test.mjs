@@ -11,14 +11,14 @@ const env = { NODE_ENV: 'test', APP_URL: 'http://localhost', OWNER_DISCORD_ID: o
 const bot = { status: () => ({ online: false, configured: true }), getMembers: async () => ({ members: [], ranks: [], updatedAt: null }), getCatalog: async () => ({ roles: [], channels: [] }) };
 const response = data => ({ ok: true, status: 200, json: async () => data });
 
-async function harness(t, profileId = owner) {
+async function harness(t, profileId = owner, service = bot) {
   const store = new Store(); let tokenRequest;
   const fetchImpl = async (url, init) => {
     if (url.endsWith('/oauth2/token')) { tokenRequest = init; return response({ access_token: 'fake-user-token' }); }
     if (url.endsWith('/users/@me')) return response({ id: profileId, username: 'test', global_name: 'Test User' });
     return response({ user: { id: profileId } });
   };
-  const app = createApp({ store, bot, env, fetchImpl });
+  const app = createApp({ store, bot: service, env, fetchImpl });
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   t.after(() => new Promise(resolve => server.close(() => { store.close(); resolve(); })));
@@ -153,4 +153,91 @@ test('settings reject role duplication and reserved source names; personnel requ
   assert.throws(() => validateSettings({ ranks: [{ id: 'a', name: 'A', roleId: target }], baseRoleIds: [target], logSources: [] }), /basisrol/);
   assert.throws(() => validateSettings({ ranks: [{ id: 'a', name: 'A', roleId: target }], preserveRoleIds: [target], logSources: [] }), /behouden/);
   assert.throws(() => validateAction({ type: 'demote', discordId: target, reason: 'Test', idempotencyKey: 'long_unique_key_123' }), /Kies een rang/);
+});
+
+test('portal ranks inherit current rights, transfer members and revoke access without affecting owner', () => {
+  const store = new Store();
+  const group = { id: 'managers', name: 'Management', color: '#ef3b48', permissions: ['members','hire'], logSourceIds: ['sales'], memberIds: [member] };
+  store.saveGroup(group);
+  assert.equal(store.getAccount(member).groupId, 'managers');
+  assert.deepEqual(accessFor(member,store,owner).permissions, ['members','hire']);
+  assert.deepEqual(allowedLogSources(accessFor(member,store,owner)), ['portal','sales']);
+  store.saveGroup({...group,permissions:['members'],memberIds:undefined});
+  assert.deepEqual(accessFor(member,store,owner).permissions,['members']);
+  store.saveGroup({...group,id:'sales',name:'Sales',permissions:['logs'],logSourceIds:[]});
+  assert.equal(store.getAccount(member).groupId,'sales');
+  assert.deepEqual(store.getGroup('managers').memberIds,[]);
+  store.deleteGroup('sales');
+  assert.equal(accessFor(member,store,owner),null);
+  assert.equal(accessFor(owner,store,owner).isOwner,true);
+  store.saveGroup({...group,memberIds:[member]});
+  store.saveGroup({...group,memberIds:[]});
+  assert.equal(store.getAccount(member).active,false);
+  assert.equal(accessFor(member,store,owner),null);
+  store.close();
+});
+
+test('only fixed owner can manage portal ranks; group validation prevents owner assignment and admin grants', async t => {
+  const {validateGroup}=await import('../lib/security.mjs');
+  assert.throws(()=>validateGroup({id:'g',name:'Managers',permissions:['accounts'],memberIds:[]},owner),/paginarechten/);
+  assert.throws(()=>validateGroup({id:'g',name:'Managers',permissions:['members'],memberIds:[owner]},owner),/Directie-account/);
+  const {request,login,store}=await harness(t,member);
+  store.saveAccount({id:member,label:'Staff',permissions:['members','hire'],logSourceIds:[],active:true});
+  const {cookie}=await login();
+  const session=await (await request('/api/session',{headers:{Cookie:cookie}})).json();
+  assert.equal((await request('/api/account-groups',{headers:{Cookie:cookie}})).status,403);
+  assert.equal((await request('/api/account-groups',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json','X-CSRF-Token':session.csrfToken},body:JSON.stringify({id:'g',name:'New',permissions:['members']})})).status,403);
+});
+
+test('owner creates a rank with member IDs and receives memberships through API',async t=>{
+  const {request,login}=await harness(t);const {cookie}=await login();
+  const session=await (await request('/api/session',{headers:{Cookie:cookie}})).json();
+  const headers={Cookie:cookie,'Content-Type':'application/json','X-CSRF-Token':session.csrfToken};
+  const body=JSON.stringify({id:'management',name:'Management',color:'#ef3b48',permissions:['members','demote'],logSourceIds:[],memberIds:[member]});
+  assert.equal((await request('/api/account-groups',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json'},body})).status,403);
+  assert.equal((await request('/api/account-groups',{method:'POST',headers,body})).status,200);
+  const groups=await(await request('/api/account-groups',{headers:{Cookie:cookie}})).json();
+  assert.deepEqual(groups.groups[0].memberIds,[member]);
+});
+
+test('extra role selection is validated, fingerprinted and durably recorded through personnel operation',async()=>{
+  const extra='777777777777777777';const another='888888888888888888';
+  const payload=validateAction({type:'hire',discordId:target,rankId:'trial',reason:'New member',roleIds:[extra,extra],idempotencyKey:'hiring_with_extra_roles_001'});
+  assert.deepEqual(payload.roleIds,[extra]);
+  assert.throws(()=>validateAction({...payload,type:'demote'}),/alleen/);
+  const store=new Store();let roles=0;let notices=0;
+  const service={performAction:async input=>{roles++;return {targetName:'New member',extraRoleIds:input.roleIds||[]}},notifyAction:async()=>{if(++notices===1)throw Error('temporary');return {messageId:'ok'}}};
+  const run=createOperationRunner({store,bot:service});
+  assert.equal((await run(payload,{id:owner})).status,'notification_failed');
+  assert.deepEqual(store.getPersonnelRoleIds(target),[extra]);
+  await assert.rejects(()=>run({...payload,roleIds:[another]},{id:owner}),error=>error.status===409);
+  await run(payload,{id:owner});assert.equal(roles,1);
+  await run(validateAction({type:'dismiss',discordId:target,rankId:'',reason:'Leave',idempotencyKey:'dismiss_with_extra_roles_001'}),{id:owner});
+  assert.deepEqual(store.getPersonnelRoleIds(target),[]);
+  store.close();
+});
+
+test('database upgrade preserves existing accounts and inherited ranks survive a restart',async()=>{
+  const {DatabaseSync}=await import('node:sqlite');const {mkdtempSync,rmSync}=await import('node:fs');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+  const dir=mkdtempSync(join(tmpdir(),'royalcars-migration-'));const path=join(dir,'portal.sqlite');
+  try{
+    const old=new DatabaseSync(path);old.exec('CREATE TABLE accounts (id TEXT PRIMARY KEY,label TEXT NOT NULL,permissions TEXT NOT NULL,log_sources TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)');
+    old.prepare('INSERT INTO accounts VALUES(?,?,?,?,?,?,?)').run(member,'Existing account','["members"]','[]',1,new Date().toISOString(),new Date().toISOString());old.close();
+    let store=new Store(path);assert.equal(store.getAccount(member).label,'Existing account');assert.deepEqual(accessFor(member,store,owner).permissions,['members']);
+    store.saveGroup({id:'team',name:'Team',color:'#ef3b48',permissions:['logs'],logSourceIds:[],memberIds:[member]});store.close();
+    store=new Store(path);assert.equal(store.getAccount(member).label,'Existing account');assert.deepEqual(accessFor(member,store,owner).permissions,['logs']);store.close();
+  }finally{rmSync(dir,{recursive:true,force:true})}
+});
+
+test('personnel options show only assignable allowlisted extra roles for delegated accounts and refresh group permissions immediately',async t=>{
+  const extra='777777777777777777',other='888888888888888888',rank='666666666666666666';
+  const service={...bot,getCatalog:async()=>({roles:[{id:rank,name:'Rank',assignable:true},{id:extra,name:'Extra',assignable:true},{id:other,name:'Not allowed',assignable:true}],channels:[]})};
+  const {request,login,store}=await harness(t,member,service);
+  store.setSettings({ranks:[{id:'dealer',name:'Dealer',roleId:rank,order:0}],channels:{},baseRoleIds:[],preserveRoleIds:[],hireRoleIds:[extra],logSources:[]});
+  const group={id:'hr',name:'HR',color:'#ef3b48',permissions:['hire'],logSourceIds:[],memberIds:[member]};store.saveGroup(group);
+  const {cookie}=await login();
+  const options=await(await request('/api/personnel/options',{headers:{Cookie:cookie}})).json();
+  assert.deepEqual(options.roles.map(role=>role.id),[extra]);assert.equal(options.ranks[0].id,'dealer');
+  store.saveGroup({...group,permissions:['members']});
+  assert.equal((await request('/api/personnel/options',{headers:{Cookie:cookie}})).status,403);
 });

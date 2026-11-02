@@ -4,7 +4,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname } from 'node:path';
 import { Store, SQLiteSessionStore } from './lib/store.mjs';
-import { HttpError, DISCORD_ID, accessFor, allowedLogSources, safeEqual, csrfToken, validateSettings, validateAccount, validateAction, createOperationRunner } from './lib/security.mjs';
+import { HttpError, DISCORD_ID, accessFor, allowedLogSources, safeEqual, csrfToken, validateSettings, validateAccount, validateGroup, validateAction, createOperationRunner } from './lib/security.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DISCORD_API = 'https://discord.com/api/v10';
@@ -63,7 +63,7 @@ export function createApp({ store, bot, env = process.env, fetchImpl = fetch }) 
     const access = accessFor(req.session.user?.id, store, env.OWNER_DISCORD_ID);
     if (!access) return res.json({ authenticated: false, configured, preview: false, user: null, permissions: [], csrfToken: null, setup, bot: { online: Boolean(bot.status().online), configured: setup.bot } });
     req.session.csrfToken ||= csrfToken();
-    res.json({ authenticated: true, configured, preview: false, user: { ...req.session.user, isOwner: access.isOwner }, permissions: access.permissions, ranks: store.getSettings().ranks, csrfToken: req.session.csrfToken, setup, bot: bot.status() });
+    res.json({ authenticated: true, configured, preview: false, user: { ...req.session.user, isOwner: access.isOwner, groupName: access.groupName || '', groupColor: access.groupColor || '' }, permissions: access.permissions, ranks: store.getSettings().ranks, csrfToken: req.session.csrfToken, setup, bot: bot.status() });
   });
 
   app.get('/auth/discord', throttle(20, 60_000), (req, res, next) => {
@@ -109,7 +109,7 @@ export function createApp({ store, bot, env = process.env, fetchImpl = fetch }) 
   });
   app.get('/api/accounts', guard('accounts'), (req, res) => res.json({ accounts: store.listAccounts() }));
   app.post('/api/accounts', guard('accounts'), csrf, throttle(60, 60_000), (req, res, next) => {
-    try { const account = validateAccount(req.body, env.OWNER_DISCORD_ID); const existing = store.getAccount(account.id); store.saveAccount(account); store.addLog({ type: 'account', actorId: req.user.id, actorName: req.user.displayName, targetId: account.id, content: `Account ${existing ? 'gewijzigd' : 'aangemaakt'}: ${account.label || account.id}.` }); res.json({ account: store.getAccount(account.id) }); } catch (error) { next(error); }
+    try { const account = validateAccount(req.body, env.OWNER_DISCORD_ID); if (account.groupId && !store.getGroup(account.groupId)) throw new HttpError(400, 'Deze beheerrang bestaat niet.'); const existing = store.getAccount(account.id); store.saveAccount(account); store.addLog({ type: 'account', actorId: req.user.id, actorName: req.user.displayName, targetId: account.id, content: `Account ${existing ? 'gewijzigd' : 'aangemaakt'}: ${account.label || account.id}.` }); res.json({ account: store.getAccount(account.id) }); } catch (error) { next(error); }
   });
   app.delete('/api/accounts/:id', guard('accounts'), csrf, (req, res, next) => {
     if (req.params.id === env.OWNER_DISCORD_ID) return next(new HttpError(400, 'Het Directie-account kan niet worden verwijderd.'));
@@ -117,10 +117,33 @@ export function createApp({ store, bot, env = process.env, fetchImpl = fetch }) 
     store.deleteAccount(req.params.id); store.addLog({ type: 'account', actorId: req.user.id, actorName: req.user.displayName, targetId: req.params.id, content: 'Accounttoegang ingetrokken.' }); res.json({ ok: true });
   });
   app.get('/api/settings', guard('settings'), (req, res) => res.json({ settings: store.getSettings() }));
+  app.get('/api/account-groups', guard('accounts'), (req, res) => res.json({ groups: store.listGroups() }));
+  app.post('/api/account-groups', guard('accounts'), csrf, (req, res, next) => {
+    try {
+      const group = validateGroup(req.body, env.OWNER_DISCORD_ID);
+      if (!store.getGroup(group.id) && store.listGroups().length >= 50) throw new HttpError(400, 'Maximaal 50 beheerrangen toegestaan.');
+      const saved = store.saveGroup(group);
+      store.addLog({ type: 'account', actorId: req.user.id, actorName: req.user.displayName, content: `Beheerrang bijgewerkt: ${group.name}.` });
+      res.json({ group: saved });
+    } catch (error) { next(error); }
+  });
+  app.delete('/api/account-groups/:id', guard('accounts'), csrf, (req, res) => {
+    store.deleteGroup(req.params.id);
+    store.addLog({ type: 'account', actorId: req.user.id, actorName: req.user.displayName, content: 'Beheerrang verwijderd; bijbehorende toegang ingetrokken.' });
+    res.json({ ok: true });
+  });
   app.put('/api/settings', guard('settings'), csrf, (req, res, next) => {
     try { const value = validateSettings(req.body.settings || req.body); store.setSettings(value); store.addLog({ type: 'settings', actorId: req.user.id, actorName: req.user.displayName, content: 'Discord-koppelingen en rangen bijgewerkt.' }); res.json({ settings: value }); } catch (error) { next(error); }
   });
   app.get('/api/discord/catalog', guard('settings'), asyncRoute(async (req, res) => res.json(await bot.getCatalog())));
+  app.get('/api/personnel/options', guard(), asyncRoute(async (req, res) => {
+    if (!['hire', 'demote', 'dismiss'].some(permission => req.access.permissions.includes(permission))) throw new HttpError(403, 'Je hebt geen toegang tot personeelsbeheer.');
+    const settings = store.getSettings();
+    const catalog = await bot.getCatalog();
+    const excluded = new Set([...settings.ranks.map(rank => rank.roleId), ...(settings.preserveRoleIds || []), ...(settings.baseRoleIds || [])]);
+    const roles = catalog.roles.filter(role => role.assignable && !excluded.has(role.id) && (req.access.isOwner || (settings.hireRoleIds || []).includes(role.id)));
+    res.json({ ranks: settings.ranks, roles: req.access.permissions.includes('hire') ? roles : [], baseRoles: catalog.roles.filter(role => (settings.baseRoleIds || []).includes(role.id)) });
+  }));
   const runOperation = createOperationRunner({ store, bot });
   app.post('/api/personnel', guard(), csrf, throttle(30, 60_000), asyncRoute(async (req, res) => {
     const input = validateAction(req.body);

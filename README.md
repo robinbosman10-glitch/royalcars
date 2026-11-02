@@ -7,7 +7,9 @@ Een Nederlands personeelsportaal en Discord-bot voor Royal Cars, met een rood/zw
 - Dashboard en live ledenlijst, gegroepeerd op de ingestelde Discord-rangen.
 - Aannemen, demoten en ontslaan via gecontroleerde rolwijzigingen en een bericht in een zelf gekozen Discord-kanaal.
 - Discord-logkanalen koppelen en hun nieuwe berichten op het portaal bekijken.
-- Accountbeheer op Discord-ID met afzonderlijke pagina- en actierechten, uitsluitend voor de vaste eigenaar.
+- Accountbeheer op Discord-ID, met zelf gemaakte beheerrangen, groepsrechten en leden per rang. Alleen de vaste eigenaar kan accounts en rangen beheren.
+- Aanname met een gekozen personeelsrang en aanvullende Discord-rollen; bij demotie kies je de lagere doelrang. Extra aanname-rollen blijven bij demotie behouden en worden bij ontslag verwijderd.
+- Luxe autofotografie, het Royal Cars Amersfoort-logo en een ledenlijst met profielkaarten per rang.
 - Instellingen voor rangen, actiekanalen, extra personeelsrollen en rollen die behouden blijven.
 - Blijvende SQLite-opslag voor accounts, instellingen, sessies, activiteiten en uitgevoerde acties.
 - Een openbaar, alleen-lezen ontwerpvoorbeeld op `/preview`, met fictieve voorbeeldgegevens.
@@ -56,3 +58,11 @@ De tests gebruiken mocks en sturen geen berichten naar een echte Discord-server.
 - [Discord Gateway](https://docs.discord.com/developers/events/gateway)
 - [Railway custom domains](https://docs.railway.com/networking/domains)
 
+
+## Beheerrangen en extra Discord-rollen
+
+Onder **Accounts → Beheerrang maken** kies je een naam, kleur, pagina- en actierechten, logbronnen en Discord-ID’s. Gekoppelde accounts nemen de actuele rangrechten over. Verwijderen van een rang trekt de bijbehorende toegang in; het vaste Directie-account blijft beschermd. Bestaande accounts met individuele rechten blijven bruikbaar.
+
+Onder **Personeel → Aannemen** kies je de personeelsrang en extra Discord-rollen. De Directie ziet de rollen die de bot kan beheren. Voor andere bevoegde accounts wordt de selectie beperkt door **Instellingen → Extra rollen bij aanname** en de eigen Discord-rolhiërarchie. Onder **Demoten** kies je de nieuwe, lagere rang.
+
+Beheerrangen regelen toegang tot de website; personeelsrangen zijn gekoppeld aan Discord-rollen. De server bewaart gekozen extra rollen per medewerker, ook na een herstart. De databankmigratie behoudt bestaande accounts, instellingen en activiteiten.
