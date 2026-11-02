@@ -1,0 +1,9 @@
+{
+  "name": "royal-cars-admin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24.0.0" },
+  "scripts": { "start": "node --env-file-if-exists=.env server.mjs", "dev": "node --env-file-if-exists=.env server.mjs", "test": "node --test tests/*.test.mjs", "check": "node --check server.mjs && node --check lib/store.mjs && node --check lib/security.mjs && node --check lib/discord.mjs && node --check public/app.js" },
+  "dependencies": { "discord.js": "^14.25.1", "express": "^5.1.0", "express-session": "^1.18.2" }
+}

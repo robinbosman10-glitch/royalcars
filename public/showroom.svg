@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 540" fill="none">
+<defs><linearGradient id="body" x1="560" y1="172" x2="565" y2="390" gradientUnits="userSpaceOnUse"><stop stop-color="#626369"/><stop offset=".27" stop-color="#27282d"/><stop offset=".6" stop-color="#131418"/><stop offset="1" stop-color="#07080a"/></linearGradient><linearGradient id="bonnet" x1="567" y1="232" x2="587" y2="355" gradientUnits="userSpaceOnUse"><stop stop-color="#46474d"/><stop offset="1" stop-color="#17181b"/></linearGradient><linearGradient id="glass" x1="640" y1="156" x2="610" y2="256" gradientUnits="userSpaceOnUse"><stop stop-color="#1a1b20"/><stop offset=".7" stop-color="#090b10"/><stop offset="1" stop-color="#343740"/></linearGradient><linearGradient id="floor"><stop stop-color="#ff3944" stop-opacity="0"/><stop offset=".5" stop-color="#e52636" stop-opacity=".18"/><stop offset="1" stop-color="#ff3944" stop-opacity="0"/></linearGradient><linearGradient id="rim"><stop stop-color="#9a9da5"/><stop offset=".5" stop-color="#1d1f25"/><stop offset="1" stop-color="#7c7f87"/></linearGradient><filter id="blur"><feGaussianBlur stdDeviation="15"/></filter><filter id="glow"><feGaussianBlur stdDeviation="4"/></filter></defs>
+<path d="M180 410 870 236M240 451l697-177M350 494l610-151" stroke="#50515a" stroke-opacity=".12"/>
+<path d="M602 0v181M856 0v217M350 0v237" stroke="#72727e" stroke-opacity=".09"/>
+<path d="M720 0 1000 270" stroke="#e5333f" stroke-width="3" stroke-opacity=".55"/><path d="M753 0 1000 237" stroke="#e5333f" stroke-opacity=".19"/>
+<ellipse cx="616" cy="416" rx="318" ry="35" fill="#000" opacity=".65" filter="url(#blur)"/><ellipse cx="635" cy="425" rx="300" ry="12" fill="url(#floor)"/>
+<path d="m329 299 70-47 76-26 82-70c17-13 116-21 160-7l109 54 62 26 37 93-21 45-430 57-151-34z" fill="url(#body)" stroke="#777981" stroke-opacity=".45"/>
+<path d="m484 232 80-65c15-10 104-17 144-5l96 45-132 13z" fill="url(#glass)" stroke="#757780" stroke-opacity=".4"/>
+<path d="m590 165-28 65m135-67 82 47" stroke="#5b5e67" stroke-width="3"/><path d="m488 239 176-12 144-14-58 65-288 49-109-14z" fill="url(#bonnet)"/>
+<path d="m370 310 125-55 150-16m-112 78 215-47m-161-15-79 52m-50-34-96 42" stroke="#9ea0a6" stroke-opacity=".32"/>
+<path d="m345 313 112 14 289-48 143-42 11 34-138 53-302 48-124-20z" fill="#0c0e12"/>
+<path d="m356 317 92 14 78-13-6 14-71 15-86-13z" fill="#eef5ff"/><path d="m356 317 92 14 78-13" stroke="#fff" stroke-width="4" filter="url(#glow)"/><path d="m765 280 98-32 7 12-102 36z" fill="#f1f6ff"/><path d="m765 280 98-32" stroke="#fff" stroke-width="3" filter="url(#glow)"/>
+<path d="m348 354 111 25 293-46-21 44-270 36-103-25z" fill="#0b0c0e" stroke="#45464c"/>
+<path d="m497 375 204-33-13 26-184 27z" fill="#030405"/><path d="m508 382 171-27m-165 33 159-26" stroke="#42444d" stroke-width="2"/>
+<path d="m357 365 77 17-4 19-66-17zm374-28 29-10-4 39-41 8z" fill="#08090b" stroke="#34353c"/>
+<path d="m442 350 23 9 18-16-22 1z" fill="#d6d6d9"/>
+<ellipse cx="807" cy="346" rx="47" ry="67" transform="rotate(11 807 346)" fill="#07080a" stroke="#34353b" stroke-width="3"/><ellipse cx="807" cy="345" rx="32" ry="49" transform="rotate(11 807 345)" fill="#1d1f24" stroke="url(#rim)" stroke-width="5"/><ellipse cx="807" cy="345" rx="9" ry="13" transform="rotate(11 807 345)" fill="#6d7078"/>
+<path d="m816 300-10 34-18-20m9 29-21 14m31-4 1 37m8-46 17-23m-17 32 11 23" stroke="#a3a5ad" stroke-width="4"/>
+<ellipse cx="385" cy="385" rx="28" ry="45" transform="rotate(-4 385 385)" fill="#07080a" stroke="#2d2e34" stroke-width="3"/><ellipse cx="385" cy="385" rx="17" ry="31" transform="rotate(-4 385 385)" fill="#25272d" stroke="#656872" stroke-width="4"/><path d="m382 357 2 52m-14-34 26 19m-27 0 27-18" stroke="#8b8e97" stroke-width="3"/>
+<path d="m843 231 35 1 13-10-10-10-27 5z" fill="#33353c" stroke="#747780"/><path d="m595 232-13 8 14 6 32-5-5-9z" fill="#494b53"/>
+<path d="m785 237-24 38 5 32m109-49 11 35m-79-17-15 32m-111-71 69 28" stroke="#8f919a" stroke-opacity=".3"/>
+<path d="M323 433h586" stroke="#fff" stroke-opacity=".05"/><path d="M702 461h207" stroke="#e5333f" stroke-width="2"/><text x="925" y="465" fill="#8d8e96" font-family="Arial,sans-serif" font-size="11" letter-spacing="3">RC</text>
+</svg>
