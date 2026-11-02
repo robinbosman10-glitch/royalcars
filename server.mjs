@@ -118,13 +118,14 @@ export function createApp({ store, bot, env = process.env }) {
     if (account.groupId && !store.getGroup(account.groupId)) throw new HttpError(400, 'Deze beheerrang bestaat niet.');
     const existing = store.getAccount(account.id);
     const credential = store.getCredential(account.id);
+    if (!credential && (!req.body.loginUsername || !req.body.loginPassword)) throw new HttpError(400, 'Vul een gebruikersnaam en wachtwoord in voor dit nieuwe account.');
     let login;
     if (req.body.loginUsername || req.body.loginPassword) {
       const username = validateUsername(req.body.loginUsername || credential?.username);
       const taken = store.findCredential(username);
       if (taken && taken.id !== account.id) throw new HttpError(409, 'Deze gebruikersnaam is al in gebruik.');
       if (!credential || req.body.loginPassword) validatePassword(req.body.loginPassword);
-      login = { id: account.id, username, passwordHash: req.body.loginPassword ? await hashPassword(req.body.loginPassword) : credential.passwordHash, mustChangePassword: req.body.loginPassword ? true : credential.mustChangePassword };
+      login = { id: account.id, username, passwordHash: req.body.loginPassword ? await hashPassword(req.body.loginPassword) : credential.passwordHash, mustChangePassword: req.body.loginPassword ? false : credential.mustChangePassword };
     }
     store.saveAccountAndLogin(account, login);
     store.addLog({ type: 'account', actorId: req.user.id, actorName: req.user.displayName, targetId: account.id, content: `Account ${existing ? 'gewijzigd' : 'aangemaakt'}: ${account.label || account.id}.` });

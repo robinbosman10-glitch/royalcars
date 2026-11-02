@@ -117,7 +117,7 @@ test('password login rotates session ID, protects fixed owner and disables forme
 test('write routes reject absent CSRF and reject cross-origin requests even with a valid token', async t => {
   const { request, login } = await harness(t); const { cookie } = await login();
   const state = await (await request('/api/session', { headers: { Cookie: cookie } })).json();
-  const account = { id: member, label: 'Staff', permissions: ['members'], logSourceIds: [] };
+  const account = { id: member, label: 'Staff', permissions: ['members'], logSourceIds: [], loginUsername: 'staff.test', loginPassword: testPassword };
   const write = headers => request('/api/accounts', { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(account) });
   assert.equal((await write({})).status, 403);
   assert.equal((await write({ 'X-CSRF-Token': state.csrfToken, Origin: 'https://attacker.example' })).status, 403);
@@ -303,7 +303,7 @@ test('admin credential reset logs out existing users, rejects duplicate username
   const original=h.store.getCredential(member).version;
   const update=await h.request('/api/accounts',{method:'POST',headers,body:JSON.stringify(account)});assert.equal(update.status,200);
   assert.equal((await h.request('/api/members',{headers:{Cookie:oldStaffCookie}})).status,401);
-  const returned=await update.json();assert.equal(returned.account.loginUsername,'staff.new');assert.equal(returned.account.mustChangePassword,true);assert.notEqual(h.store.getCredential(member).version,original);
+  const returned=await update.json();assert.equal(returned.account.loginUsername,'staff.new');assert.equal(returned.account.mustChangePassword,false);assert.notEqual(h.store.getCredential(member).version,original);
   const list=await(await h.request('/api/accounts',{headers:{Cookie:ownerSession.cookie}})).json();
   assert.ok(!JSON.stringify(list).includes('passwordHash'));assert.ok(!JSON.stringify(list).includes(account.loginPassword));assert.ok(!JSON.stringify(list).includes('scrypt$'));
   const logs=JSON.stringify(h.store.listLogs());assert.ok(!logs.includes(account.loginPassword));assert.ok(!logs.includes('scrypt$'));
@@ -317,4 +317,25 @@ test('a legacy OAuth session cannot authenticate after the switch to passwords',
   assert.equal((await h.request('/api/accounts',{headers:{Cookie:h.cookie}})).status,401);
   const session=await(await h.request('/api/session',{headers:{Cookie:h.cookie}})).json();assert.equal(session.authenticated,false);
   assert.equal((await h.request('/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,404);
+});
+
+
+test('new managed account saves credentials and rank, logs in directly and retains password on rights edits',async t=>{
+  const h=await harness(t);const ownerSession=await h.login();
+  const headers={Cookie:ownerSession.cookie,'Content-Type':'application/json','X-CSRF-Token':ownerSession.data.csrfToken};
+  h.store.saveGroup({id:'sales',name:'Verkoop',color:'#ef3b48',permissions:['members'],logSourceIds:[]});
+  const account={id:member,label:'New Staff',groupId:'sales',permissions:[],logSourceIds:[],active:true,loginUsername:'new.staff',loginPassword:testPassword};
+  const incomplete=await h.request('/api/accounts',{method:'POST',headers,body:JSON.stringify({...account,loginPassword:''})});
+  assert.equal(incomplete.status,400);assert.equal(h.store.getAccount(member),null);
+  const created=await h.request('/api/accounts',{method:'POST',headers,body:JSON.stringify(account)});
+  assert.equal(created.status,200);const saved=(await created.json()).account;
+  assert.equal(saved.hasLogin,true);assert.equal(saved.mustChangePassword,false);assert.equal(saved.groupId,'sales');
+  const pre=await h.request('/api/session'),session=await pre.json();
+  const signedIn=await h.request('/auth/login',{method:'POST',headers:{Cookie:pre.headers.getSetCookie()[0].split(';')[0],'Content-Type':'application/json','X-CSRF-Token':session.csrfToken},body:JSON.stringify({username:'new.staff',password:testPassword})});
+  assert.equal(signedIn.status,200);const staff=await signedIn.json();assert.equal(staff.mustChangePassword,false);assert.deepEqual(staff.permissions,['members']);
+  const staffCookie=signedIn.headers.getSetCookie()[0].split(';')[0];
+  assert.equal((await h.request('/api/members',{headers:{Cookie:staffCookie}})).status,200);
+  const hash=h.store.getCredential(member).passwordHash;
+  const edited=await h.request('/api/accounts',{method:'POST',headers,body:JSON.stringify({...account,label:'Updated Staff',loginPassword:''})});
+  assert.equal(edited.status,200);assert.equal(h.store.getAccount(member).label,'Updated Staff');assert.equal(h.store.getCredential(member).passwordHash,hash);
 });

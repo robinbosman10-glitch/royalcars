@@ -5,14 +5,14 @@ import { readFileSync } from 'node:fs';
 import { webcrypto } from 'node:crypto';
 
 const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-function context(){
+function context(overrides={}){
   const app={innerHTML:''};
   const sandbox=vm.createContext({crypto:webcrypto,structuredClone,URLSearchParams,URL,FormData,console,
     document:{documentElement:{dataset:{}},activeElement:null,hidden:false,getElementById:id=>id==='app'?app:{children:[],classList:{add(){},remove(){}}},querySelectorAll:()=>[],addEventListener(){}},
     location:{pathname:'/preview',hash:'#dashboard',search:''},window:{addEventListener(){}},
     localStorage:{getItem:()=>null,setItem(){}},sessionStorage:{getItem:()=>null,setItem(){}},
     setInterval(){},setTimeout(){},clearTimeout(){},queueMicrotask,
-    fetch:async()=>({status:401,ok:false,json:async()=>({error:'Gebruikersnaam of wachtwoord is onjuist.'})})});
+    fetch:async()=>({status:401,ok:false,json:async()=>({error:'Gebruikersnaam of wachtwoord is onjuist.'})}),...overrides});
   vm.runInContext(source,sandbox);return sandbox;
 }
 
@@ -32,4 +32,27 @@ test('a failed password login retains the pre-authentication CSRF token so the n
   const ctx=context();vm.runInContext("state.preview=false;state.session={configured:true,authenticated:false,csrfToken:'csrf-test'};renderLogin()",ctx);
   await assert.rejects(vm.runInContext("api('/auth/login',{method:'POST',body:'{}'})",ctx),/Gebruikersnaam of wachtwoord/);
   assert.equal(vm.runInContext('state.session.csrfToken',ctx),'csrf-test');
+});
+
+
+function accountFormContext(values={}){
+  const ctx=context({FormData:class{constructor(){this.values={id:'222222222222222222',label:'Sales',loginUsername:'new.staff',loginPassword:'Example password phrase',groupId:'sales',permissions:['members'],...values}}get(key){return this.values[key]??null}getAll(key){return this.values[key]||[]}}});
+  vm.runInContext("state.preview=false;state.accounts=[];state.session={user:{id:'424086753327054849'}}",ctx);return ctx;
+}
+test('account form validates missing data with useful errors and keeps managed passwords permanent',()=>{
+  const html=vm.runInContext('individualAccountsView()',context());assert.match(html,/account-form" novalidate/);assert.match(html,/id="account-message"/);assert.ok(!html.includes('Tijdelijk wachtwoord'));
+  assert.throws(()=>vm.runInContext('accountData({})',accountFormContext({loginPassword:''})),/Kies een wachtwoord/);
+  assert.throws(()=>vm.runInContext('accountData({})',accountFormContext({loginPassword:'short'})),/12 tot 128/);
+  assert.throws(()=>vm.runInContext('accountData({})',accountFormContext({id:'123'})),/Discord-ID/);
+  const ctx=accountFormContext();const data=vm.runInContext('accountData({})',ctx);assert.equal(data.loginUsername,'new.staff');assert.equal(data.groupId,'sales');
+  const edit=accountFormContext({loginPassword:''});vm.runInContext("state.accounts=[{id:'222222222222222222',hasLogin:true}]",edit);assert.equal(vm.runInContext('accountData({}).loginPassword',edit),'');
+});
+test('account save sends credentials and keeps fields on server errors',async()=>{
+  const handlers=[];let submitted;
+  const message={textContent:'',focus(){this.focused=true}},button={disabled:false};
+  const form={id:'account-form',querySelector:q=>q==='[role=alert]'?message:button};
+  const ctx=context({FormData:class{get(key){return {id:'222222222222222222',label:'Sales',loginUsername:'sales.staff',loginPassword:'Example password phrase'}[key]||null}getAll(){return []}},document:{documentElement:{dataset:{}},activeElement:null,getElementById:()=>({innerHTML:'',children:[],classList:{add(){},remove(){}}}),querySelectorAll:()=>[],addEventListener(type,fn){if(type==='submit')handlers.push(fn)}},fetch:async(url,options)=>{submitted=JSON.parse(options.body);return {status:409,ok:false,json:async()=>({error:'Deze gebruikersnaam is al in gebruik.'})}}});
+  vm.runInContext("state.preview=false;state.accounts=[];state.session={user:{id:'424086753327054849'},csrfToken:'test'}",ctx);
+  await handlers[0]({target:form,preventDefault(){}});
+  assert.equal(submitted.loginUsername,'sales.staff');assert.equal(submitted.loginPassword,'Example password phrase');assert.equal(message.textContent,'Deze gebruikersnaam is al in gebruik.');assert.equal(message.focused,true);assert.equal(button.disabled,false);
 });

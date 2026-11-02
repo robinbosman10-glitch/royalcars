@@ -30,8 +30,8 @@ De login werkt zodra het vaste Directie-account en de sessiesleutel zijn ingeste
 De website gebruikt gebruikersnaam en wachtwoord. Discord OAuth-login is uitgeschakeld; bestaande Discord-sessies worden niet meer geaccepteerd. Discord-ID’s blijven gekoppeld aan de bot, de ledenlijst en personeelsacties.
 
 - Alleen het vaste account uit `OWNER_DISCORD_ID` kan accounts, inloggegevens en beheerrangen beheren.
-- Onder **Accounts** kan de Directie een gebruikersnaam en tijdelijk wachtwoord instellen. Bestaande accounts zonder inloggegevens kunnen pas inloggen nadat die zijn ingesteld.
-- Een tijdelijk wachtwoord moet bij de eerste login worden vervangen. Iedere gebruiker kan daarna via het sleutelicoon de eigen inloggegevens wijzigen.
+- Onder **Accounts** kan de Directie een gebruikersnaam en wachtwoord instellen. Bestaande accounts zonder inloggegevens kunnen pas inloggen nadat die zijn ingesteld.
+- Door de Directie ingestelde wachtwoorden werken direct, zonder verplichte wijziging bij de eerste login. Iedere gebruiker kan via het sleutelicoon de eigen inloggegevens wijzigen. Alleen de eerste installatie van het vaste Directie-account vereist een eigen wachtwoord.
 - Een wachtwoordwijziging of reset meldt oude sessies af. Wachtwoorden en hashes worden nooit via de API of activiteitenlogs teruggestuurd.
 - Wachtwoorden worden opgeslagen met unieke salt en scrypt (`N=32768, r=8, p=3`). Inloggen heeft sessiegebonden CSRF-controle, beperkte inlogpogingen en algemene foutmeldingen.
 - Er is geen openbare registratie of openbare wachtwoordreset.
