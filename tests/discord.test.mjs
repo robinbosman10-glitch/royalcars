@@ -27,6 +27,12 @@ test('hire refuses existing staff and conflicting preserved staff role configura
   assert.throws(() => planRoleChanges({ type: 'hire', rankId: 'dealer', roleIds: new Set(), settings }), { code: 'ROLE_CONFIG_CONFLICT' });
 });
 
+test('configured base roles cannot silently grant or retain a higher staff rank', () => {
+  const settings = config(); settings.baseRoleIds.push(ID.high);
+  assert.throws(() => planRoleChanges({ type: 'hire', rankId: 'dealer', roleIds: new Set(), settings }), { code: 'ROLE_CONFIG_CONFLICT' });
+  assert.throws(() => planRoleChanges({ type: 'demote', rankId: 'dealer', roleIds: new Set([ID.high, ID.base]), settings }), { code: 'ROLE_CONFIG_CONFLICT' });
+});
+
 function fixture({ roleIds = [ID.high, ID.base, ID.unrelated], canSend = true, failRemove = null, ownerTarget = false } = {}) {
   const messages = new Map(); const mutations = []; const logs = [];
   const role = (id, position) => ({ id, position, name: id, managed: false, hexColor: '#ee0000' });
