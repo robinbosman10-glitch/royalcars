@@ -132,7 +132,7 @@ export function createApp({ store, bot, env = process.env, fetchImpl = fetch }) 
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'Deze API-route bestaat niet.' }));
   app.get(['/', '/preview'], (req, res) => res.sendFile(join(ROOT, 'public', 'index.html')));
-  app.use(express.static(join(ROOT, 'public'), { dotfiles: 'deny', index: false, maxAge: production ? '1h' : 0 }));
+  app.use(express.static(join(ROOT, 'public'), { dotfiles: 'deny', index: false, maxAge: 0 }));
   app.use((error, req, res, next) => {
     const status = error.status >= 400 && error.status < 600 ? error.status : 500;
     const message = status === 500 ? 'Er ging iets mis bij het verwerken van het verzoek.' : error.type === 'entity.parse.failed' ? 'Ongeldige JSON.' : error.message;
