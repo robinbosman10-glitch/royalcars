@@ -240,6 +240,42 @@ test('personnel options show only assignable allowlisted extra roles for delegat
   assert.equal((await request('/api/personnel/options',{headers:{Cookie:cookie}})).status,403);
 });
 
+test('promotions require a separate permission and record the rank change', async t => {
+  const announcements = [];
+  const service = {
+    ...bot,
+    performAction: async input => {
+      assert.equal(input.type, 'promote');
+      assert.equal(input.rankId, 'senior');
+      return { targetName: 'Medewerker', oldRankName: 'Dealer', rankName: 'Senior' };
+    },
+    notifyAction: async operation => {
+      announcements.push(operation);
+      return { messageId: 'test-announcement' };
+    },
+  };
+  const { request, login, store } = await harness(t, member, service);
+  const account = { id: member, label: 'Teamleider', permissions: ['demote'], logSourceIds: [], active: true };
+  store.saveAccount(account);
+  const { cookie, data } = await login();
+  const submit = () => request('/api/personnel', {
+    method: 'POST',
+    headers: { Cookie: cookie, 'Content-Type': 'application/json', 'X-CSRF-Token': data.csrfToken },
+    body: JSON.stringify({ type: 'promote', discordId: target, rankId: 'senior', reason: 'Goede inzet', idempotencyKey: 'promote_operation_test' }),
+  });
+  assert.equal((await submit()).status, 403);
+  assert.equal(announcements.length, 0);
+
+  store.saveAccount({ ...account, permissions: ['promote'] });
+  assert.equal((await request('/api/personnel/options', { headers: { Cookie: cookie } })).status, 200);
+  const response = await submit();
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).operation.status, 'completed');
+  assert.equal(announcements[0].type, 'promote');
+  assert.match(store.listLogs({ type: 'promote' }).logs[0].content, /van Dealer naar Senior/);
+  assert.equal(store.operationStats().promotions, 1);
+});
+
 test('salted password hashes differ and never accept an incorrect or malformed password',async()=>{
   const other=await hashPassword(testPassword);
   assert.notEqual(other,testHash);assert.equal(await verifyPassword(testPassword,other),true);

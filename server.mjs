@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname } from 'node:path';
 import { Store, SQLiteSessionStore } from './lib/store.mjs';
 import { bootstrapOwner, DUMMY_HASH, isPasswordHash, hashPassword, verifyPassword, validateUsername, validatePassword } from './lib/passwords.mjs';
-import { HttpError, DISCORD_ID, accessFor, allowedLogSources, safeEqual, csrfToken, validateSettings, validateAccount, validateGroup, validateAction, createOperationRunner } from './lib/security.mjs';
+import { HttpError, DISCORD_ID, PERSONNEL_ACTIONS, accessFor, allowedLogSources, safeEqual, csrfToken, validateSettings, validateAccount, validateGroup, validateAction, createOperationRunner } from './lib/security.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 export function configuration(env, store) {
@@ -157,7 +157,7 @@ export function createApp({ store, bot, env = process.env }) {
   });
   app.get('/api/discord/catalog', guard('settings'), asyncRoute(async (req, res) => res.json(await bot.getCatalog())));
   app.get('/api/personnel/options', guard(), asyncRoute(async (req, res) => {
-    if (!['hire', 'demote', 'dismiss'].some(permission => req.access.permissions.includes(permission))) throw new HttpError(403, 'Je hebt geen toegang tot personeelsbeheer.');
+    if (!PERSONNEL_ACTIONS.some(permission => req.access.permissions.includes(permission))) throw new HttpError(403, 'Je hebt geen toegang tot personeelsbeheer.');
     const settings = store.getSettings();
     const catalog = await bot.getCatalog();
     const excluded = new Set([...settings.ranks.map(rank => rank.roleId), ...(settings.preserveRoleIds || []), ...(settings.baseRoleIds || [])]);

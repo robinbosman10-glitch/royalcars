@@ -5,7 +5,7 @@ Een Nederlands personeelsportaal en Discord-bot voor Royal Cars, met een rood/zw
 ## Functies
 
 - Dashboard en live ledenlijst, gegroepeerd op de ingestelde Discord-rangen.
-- Aannemen, demoten en ontslaan via gecontroleerde rolwijzigingen en een bericht in een zelf gekozen Discord-kanaal.
+- Aannemen, promoveren, demoten en ontslaan via gecontroleerde rolwijzigingen en een bericht in een zelf gekozen Discord-kanaal.
 - Discord-logkanalen koppelen en hun nieuwe berichten op het portaal bekijken.
 - Accountbeheer op Discord-ID, met zelf gemaakte beheerrangen, groepsrechten en leden per rang. Alleen de vaste eigenaar kan accounts en rangen beheren.
 - Aanname met een gekozen personeelsrang en aanvullende Discord-rollen; bij demotie kies je de lagere doelrang. Extra aanname-rollen blijven bij demotie behouden en worden bij ontslag verwijderd.
@@ -55,7 +55,7 @@ Gebruik de bestaande Royal Cars-applicatie in het [Discord Developer Portal](htt
 3. Geef de bot **Manage Roles**, **View Channels**, **Read Message History**, **Send Messages** en **Embed Links** in de betreffende kanalen. Plaats zijn hoogste rol boven de personeelsrollen die hij moet beheren.
 4. Log in op de website en koppel de echte rangen en kanaal-ID’s onder **Instellingen**.
 
-Een demotie mag uitsluitend naar een lager ingestelde rang. Ontslaan verwijdert de geconfigureerde personeelsrollen; de bot verwijdert geen serverleden. Losse, niet ingestelde Discord-rollen blijven behouden. Het portaal verleent nooit automatisch toegang op basis van alleen een Discord-rolnaam.
+Een promotie mag uitsluitend naar een hoger ingestelde rang en een demotie naar een lagere rang. Koppel bij **Instellingen** het Discord-kanaal voor promoties. Ontslaan verwijdert de geconfigureerde personeelsrollen; de bot verwijdert geen serverleden. Losse, niet ingestelde Discord-rollen blijven behouden. Het portaal verleent nooit automatisch toegang op basis van alleen een Discord-rolnaam.
 
 ## Hosting
 
