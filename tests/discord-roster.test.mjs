@@ -16,8 +16,8 @@ test('roster follows website rank order and alphabetical names, including empty 
   assert.equal(result.content, '# Contact Dealers');
   assert.equal(result.embeds.length, 1);
   const { description } = result.embeds[0];
-  assert.match(description, /\*\*3\*\* medewerkers · \*\*3\*\* rangen/);
-  assert.match(description, /01 · <@&100000000000000001>\*\* · 1 lid\n• <@100000000000000002>[\s\S]*02 · Verkoop\*\* · 2 leden\n• Anna\n• Zara[\s\S]*03 · Proeftijd/);
+  assert.match(description, /^\*\*3\*\* medewerkers\n\n\n/);
+  assert.match(description, /01 · <@&100000000000000001>\*\* · 1 lid\n\n• <@100000000000000002>[\s\S]*02 · Verkoop\*\* · 2 leden\n\n• Anna\n\n• Zara[\s\S]*03 · Proeftijd/);
   assert.match(description, /Nog geen medewerkers/);
   assert.doesNotMatch(description, /Oud lid/);
   assert.doesNotMatch(description, /Open de live ledenlijst|https?:\/\//);
@@ -47,7 +47,7 @@ test('a full roster fits in one message, reports omitted rows and is determinist
   const all = first.embeds.map(embed => embed.description).join('\n');
   const displayed = (all.match(/^• /gm) || []).length;
   assert.ok(displayed > 50);
-  assert.match(all, new RegExp(`Ingekort:\\*\\* ${displayed} van 501 medewerkers · 1 van 3 rangen volledig`));
+  assert.match(all, new RegExp(`Ingekort:\\*\\* ${displayed} van 501 medewerkers zichtbaar`));
   assert.match(all, /Verkoop\*\* · 500 leden \(vervolg\)/);
   assert.doesNotMatch(all, /\p{Surrogate}/u);
   assert.doesNotMatch(all, /https?:\/\//);

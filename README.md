@@ -61,7 +61,7 @@ Een promotie mag uitsluitend naar een hoger ingestelde rang en een demotie naar 
 
 Voer `/ledenlijst` uit in het Discord-kanaal waar het overzicht moet staan. Het vaste Directie-account en leden met **Server beheren** kunnen de lijst plaatsen. De bot werkt hetzelfde bericht bij bij wijzigingen aan leden, rollen of de rangvolgorde in het portaal. De lijst gebruikt de gekoppelde rangen en volgorde van de website, van hoog naar laag.
 
-Het bericht toont Discord-tags voor medewerkers en rangen zonder meldingen te versturen. Gebruik het commando opnieuw om het bestaande bericht te verversen. Wil je de lijst verplaatsen, verwijder dan eerst het oude bericht en voer het commando uit in het nieuwe kanaal. Bij een grote lijst geeft het bericht aan hoeveel medewerkers en rangen passen.
+Het bericht toont Discord-tags voor medewerkers en rangen zonder meldingen te versturen. Gebruik het commando opnieuw om het bestaande bericht te verversen. Wil je de lijst verplaatsen, verwijder dan eerst het oude bericht en voer het commando uit in het nieuwe kanaal. Bij een grote lijst geeft het bericht aan hoeveel medewerkers zichtbaar zijn.
 
 ## Hosting
 
