@@ -64,7 +64,7 @@ export function createApp({ store, bot, env = process.env }) {
     const credential = req.session.user && req.session.authType === 'password' ? store.getCredential(req.session.user.id) : null;
     const access = credential && credential.version === req.session.authVersion ? accessFor(credential.id, store, env.OWNER_DISCORD_ID) : null;
     if (!access) return { authenticated: false, configured, authMethod: 'password', preview: false, user: null, permissions: [], csrfToken: req.session.csrfToken, setup, bot: { online: Boolean(bot.status().online), configured: setup.bot } };
-    return { authenticated: true, configured, authMethod: 'password', preview: false, mustChangePassword: credential.mustChangePassword, user: publicUser(credential, access), permissions: access.permissions, ranks: store.getSettings().ranks, csrfToken: req.session.csrfToken, setup, bot: bot.status() };
+    return { authenticated: true, configured, authMethod: 'password', preview: false, mustChangePassword: credential.mustChangePassword, user: publicUser(credential, access), permissions: access.permissions, ranks: store.getSettings().ranks.map(({ id, name, order, roleId }) => ({ id, name, order, roleId })), csrfToken: req.session.csrfToken, setup, bot: bot.status() };
   }
   app.get(['/health', '/healthz'], (req, res) => res.json({ status: 'ok', configured, bot: Boolean(bot.status().online) }));
   app.get('/api/session', (req, res) => res.json(sessionResponse(req)));
@@ -103,7 +103,7 @@ export function createApp({ store, bot, env = process.env }) {
   app.get('/api/dashboard', guard('dashboard'), asyncRoute(async (req, res) => {
     const data = await bot.getMembers();
     const recentActivity = req.access.permissions.includes('logs') ? store.listLogs({ sourceIds: allowedLogSources(req.access), limit: 8 }).logs : [];
-    res.json({ stats: { members: data.members.filter(member => member.rank).length, serverMembers: bot.status().memberCount || 0, ranks: data.ranks.length, ...store.operationStats() }, recentActivity, bot: bot.status() });
+    res.json({ stats: { members: data.members.length, serverMembers: bot.status().memberCount || 0, ranks: data.ranks.length, ...store.operationStats() }, recentActivity, bot: bot.status() });
   }));
   app.get('/api/members', guard('members'), asyncRoute(async (req, res) => res.json(await bot.getMembers())));
   app.get('/api/logs', guard('logs'), (req, res) => {
@@ -168,7 +168,7 @@ export function createApp({ store, bot, env = process.env }) {
     const catalog = await bot.getCatalog();
     const excluded = new Set([...settings.ranks.map(rank => rank.roleId), ...(settings.preserveRoleIds || []), ...(settings.baseRoleIds || [])]);
     const roles = catalog.roles.filter(role => role.assignable && !excluded.has(role.id) && (req.access.isOwner || (settings.hireRoleIds || []).includes(role.id)));
-    res.json({ ranks: settings.ranks, roles: req.access.permissions.includes('hire') ? roles : [], baseRoles: catalog.roles.filter(role => (settings.baseRoleIds || []).includes(role.id)) });
+    res.json({ ranks: settings.ranks.map(({ id, name, order, roleId }) => ({ id, name, order, roleId })), roles: req.access.permissions.includes('hire') ? roles : [], baseRoles: catalog.roles.filter(role => (settings.baseRoleIds || []).includes(role.id)) });
   }));
   const runOperation = createOperationRunner({ store, bot });
   app.post('/api/personnel', guard(), csrf, throttle(30, 60_000), asyncRoute(async (req, res) => {
