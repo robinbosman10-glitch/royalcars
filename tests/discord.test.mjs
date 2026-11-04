@@ -51,7 +51,7 @@ function fixture({ roleIds = [ID.high, ID.base, ID.unrelated], canSend = true, f
   const target = { id: ownerTarget ? ID.owner : ID.member, displayName: 'Voorbeeld', user: { bot: false, username: 'voorbeeld' }, manageable: true, joinedAt: new Date('2026-01-01'), displayAvatarURL: () => 'https://cdn.discordapp.com/example.png', roles: { cache: targetRoles, highest: { position: Math.max(0, ...roleIds.map(id => roleCache.get(id)?.position || 0)) }, add: async id => { mutations.push(['add', id]); targetRoles.set(id, roleCache.get(id)); }, remove: async id => { if (id === failRemove) throw Error('simulated'); mutations.push(['remove', id]); targetRoles.delete(id); } } };
   const me = { id: ID.bot, user: { bot: true }, permissions: { has: () => true }, roles: { highest: { comparePositionTo: other => botPosition - other.position } } };
   const actor = { id: ID.actor, roles: { highest: { comparePositionTo: other => actorPosition - other.position } } };
-  const channel = { id: ID.channel, guildId: ID.guild, name: 'personeel', isTextBased: () => true, isThread: () => false, permissionsFor: () => ({ has: () => canSend }), messages: { fetch: async () => messages }, send: async payload => { const message = { id: String(messages.size + 1), author: { id: ID.bot }, embeds: payload.embeds }; messages.set(message.id, message); return message; } };
+  const channel = { id: ID.channel, guildId: ID.guild, name: 'personeel', isTextBased: () => true, isThread: () => false, permissionsFor: () => ({ has: () => canSend }), messages: { fetch: async () => messages }, send: async payload => { const message = { id: String(messages.size + 1), author: { id: ID.bot }, ...payload }; messages.set(message.id, message); return message; } };
   const channels = new Map([[ID.channel, channel], [ID.promoteChannel, { ...channel, id: ID.promoteChannel, name: 'promoties' }]]);
   const guild = { id: ID.guild, ownerId: '100000000000000099', name: 'Royal Cars Test', memberCount: 2, roles: { cache: roleCache, fetch: async () => roleCache }, channels: { cache: channels, fetch: async id => id ? channels.get(id) : channels }, members: { cache: new Map([[target.id, target], [me.id, me]]), me, fetch: async input => input ? (input.user === ID.actor ? actor : target) : new Map([[target.id, target], [me.id, me]]), fetchMe: async () => me } };
   target.guild = guild;
@@ -117,14 +117,19 @@ test('promotion respects actor and bot hierarchy and requires a linked channel b
 test('successful promotion updates the roster and announces the new rank in the promotions channel', async () => {
   const { service, targetRoles, messages } = fixture({ roleIds: [ID.low, ID.base, ID.unrelated] });
   await service.start();
-  const action = { type: 'promote', discordId: ID.member, rankId: 'manager', actorId: ID.owner, actorName: 'Directie', reason: 'Test' };
+  const action = { type: 'promote', discordId: ID.member, rankId: 'manager', actorId: ID.owner, actorName: 'Directie', reason: `Test @everyone <@${ID.actor}>` };
   const result = await service.performAction(action);
   assert.equal(result.oldRankName, 'Cardealer');
   assert.equal(result.rankName, 'Manager');
   assert.deepEqual(new Set(targetRoles.keys()), new Set([ID.high, ID.base, ID.unrelated]));
   const notification = await service.notifyAction({ ...action, ...result, id: 'promotion-1' });
   assert.equal(notification.channelId, ID.promoteChannel);
-  assert.equal(messages.get(notification.messageId).embeds[0].title, 'ROYAL CARS · Gepromoveerd');
+  const announcement = messages.get(notification.messageId);
+  assert.equal(announcement.embeds[0].title, 'ROYAL CARS · Gepromoveerd');
+  assert.equal(announcement.content, `<@${ID.member}>`);
+  assert.deepEqual(announcement.allowedMentions, { parse: [], users: [ID.member] });
+  assert.equal((await service.notifyAction({ ...action, ...result, id: 'promotion-1' })).messageId, notification.messageId);
+  assert.equal(messages.size, 1);
   assert.equal((await service.getMembers()).members[0].rank.name, 'Manager');
   await service.stop();
 });
