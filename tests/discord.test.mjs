@@ -45,20 +45,100 @@ test('configured base roles cannot silently grant or retain a higher staff rank'
 
 function fixture({ roleIds = [ID.high, ID.base, ID.unrelated], canSend = true, failRemove = null, ownerTarget = false, botPosition = 100, actorPosition = 15, settings = config() } = {}) {
   const messages = new Map(); const mutations = []; const logs = [];
+  const registeredCommands = [];
+  const rosterEdits = new EventEmitter();
+  let rosterMessage = null;
   const role = (id, position) => ({ id, position, name: id, managed: false, hexColor: '#ee0000' });
   const roleCache = new Map([[ID.high, role(ID.high, 20)], [ID.low, role(ID.low, 10)], [ID.base, role(ID.base, 5)], [ID.unrelated, role(ID.unrelated, 3)]]);
   const targetRoles = new Map(roleIds.map(id => [id, roleCache.get(id)]));
   const target = { id: ownerTarget ? ID.owner : ID.member, displayName: 'Voorbeeld', user: { bot: false, username: 'voorbeeld' }, manageable: true, joinedAt: new Date('2026-01-01'), displayAvatarURL: () => 'https://cdn.discordapp.com/example.png', roles: { cache: targetRoles, highest: { position: Math.max(0, ...roleIds.map(id => roleCache.get(id)?.position || 0)) }, add: async id => { mutations.push(['add', id]); targetRoles.set(id, roleCache.get(id)); }, remove: async id => { if (id === failRemove) throw Error('simulated'); mutations.push(['remove', id]); targetRoles.delete(id); } } };
   const me = { id: ID.bot, user: { bot: true }, permissions: { has: () => true }, roles: { highest: { comparePositionTo: other => botPosition - other.position } } };
   const actor = { id: ID.actor, roles: { highest: { comparePositionTo: other => actorPosition - other.position } } };
-  const channel = { id: ID.channel, guildId: ID.guild, name: 'personeel', isTextBased: () => true, isThread: () => false, permissionsFor: () => ({ has: () => canSend }), messages: { fetch: async () => messages }, send: async payload => { const message = { id: String(messages.size + 1), author: { id: ID.bot }, ...payload }; messages.set(message.id, message); return message; } };
+  const channel = {
+    id: ID.channel, guildId: ID.guild, name: 'personeel',
+    isTextBased: () => true, isThread: () => false,
+    permissionsFor: () => ({ has: () => canSend }),
+    messages: {
+      fetch: async options => {
+        if (!options?.message) return messages;
+        const message = messages.get(options.message);
+        if (!message) throw Object.assign(new Error('Unknown Message'), { code: 10008 });
+        return message;
+      },
+    },
+    send: async payload => {
+      const id = String(100000000000000020n + BigInt(messages.size));
+      const message = {
+        id, author: { id: ID.bot }, ...payload,
+        edit: async next => {
+          Object.assign(message, next);
+          rosterEdits.emit('edit', message);
+          return message;
+        },
+      };
+      messages.set(id, message);
+      return message;
+    },
+  };
   const channels = new Map([[ID.channel, channel], [ID.promoteChannel, { ...channel, id: ID.promoteChannel, name: 'promoties' }]]);
   const guild = { id: ID.guild, ownerId: '100000000000000099', name: 'Royal Cars Test', memberCount: 2, roles: { cache: roleCache, fetch: async () => roleCache }, channels: { cache: channels, fetch: async id => id ? channels.get(id) : channels }, members: { cache: new Map([[target.id, target], [me.id, me]]), me, fetch: async input => input ? (input.user === ID.actor ? actor : target) : new Map([[target.id, target], [me.id, me]]), fetchMe: async () => me } };
   target.guild = guild;
+  guild.commands = { create: async command => { registeredCommands.push(command); return { name: command.name }; } };
   const client = new EventEmitter(); Object.assign(client, { user: { id: ID.bot }, guilds: { fetch: async () => guild }, isReady: () => true, login: async () => {}, destroy: () => {} });
-  const service = createDiscordService({ store: { getSettings: () => settings, addLog: log => logs.push(log) }, env: { DISCORD_TOKEN: 'unit-test-token-not-real', DISCORD_GUILD_ID: ID.guild, OWNER_DISCORD_ID: ID.owner }, clientFactory: async () => client });
-  return { service, targetRoles, mutations, messages, logs, client };
+  const store = {
+    getSettings: () => settings,
+    addLog: log => logs.push(log),
+    getRosterMessage: () => rosterMessage,
+    setRosterMessage: (_guildId, pointer) => { rosterMessage = pointer; },
+  };
+  const service = createDiscordService({ store, env: { DISCORD_TOKEN: 'unit-test-token-not-real', DISCORD_GUILD_ID: ID.guild, OWNER_DISCORD_ID: ID.owner }, clientFactory: async () => client });
+  return { service, targetRoles, mutations, messages, logs, client, guild, target, store, registeredCommands, rosterEdits };
 }
+
+test('ledenlijst posts one persistent message and edits it after a Discord role change', { timeout: 7000 }, async t => {
+  const { service, messages, client, guild, target, targetRoles, store, registeredCommands, rosterEdits } = fixture();
+  t.after(() => service.stop());
+  await service.start();
+  assert.equal(registeredCommands[0]?.name, 'ledenlijst');
+
+  const runCommand = async (userId, permissions = [], channelId = ID.channel) => {
+    const { promise, resolve } = Promise.withResolvers();
+    client.emit('interactionCreate', {
+      isChatInputCommand: () => true, commandName: 'ledenlijst', guildId: ID.guild,
+      channelId, channel: guild.channels.cache.get(channelId),
+      user: { id: userId }, memberPermissions: { has: bit => permissions.includes(bit) },
+      reply: async value => resolve(value), deferReply: async () => {}, editReply: async value => resolve(value),
+    });
+    return promise;
+  };
+  await runCommand(ID.actor);
+  await runCommand(ID.actor, [32n]);
+  assert.equal(messages.size, 0);
+
+  await runCommand(ID.owner);
+  const pointer = store.getRosterMessage(ID.guild);
+  assert.equal(pointer.channelId, ID.channel);
+  const message = messages.get(pointer.messageId);
+  assert.match(JSON.stringify(message.embeds), /Voorbeeld/);
+  const reply = await runCommand(ID.actor, [32n, 2048n], ID.promoteChannel);
+  assert.equal(reply.content, 'De bestaande live ledenlijst is bijgewerkt.');
+  assert.deepEqual(store.getRosterMessage(ID.guild), pointer);
+  assert.equal(messages.size, 1);
+  const previousEmbeds = JSON.stringify(message.embeds);
+
+  const { promise, resolve } = Promise.withResolvers();
+  rosterEdits.once('edit', resolve);
+  const timeout = setTimeout(() => resolve(null), 4000);
+  targetRoles.delete(ID.high);
+  targetRoles.set(ID.low, guild.roles.cache.get(ID.low));
+  client.emit('guildMemberUpdate', target, target);
+  const updated = await promise;
+  clearTimeout(timeout);
+  assert.equal(updated?.id, pointer.messageId);
+  assert.notEqual(JSON.stringify(updated.embeds), previousEmbeds);
+  assert.equal((await service.getMembers()).members[0].rank.name, 'Cardealer');
+  assert.equal(messages.size, 1);
+});
 
 test('missing bot credentials keep service safely offline', async () => {
   const service = createDiscordService({ store: { getSettings: config }, env: {} });

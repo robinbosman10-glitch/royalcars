@@ -153,7 +153,13 @@ export function createApp({ store, bot, env = process.env }) {
     res.json({ ok: true });
   });
   app.put('/api/settings', guard('settings'), csrf, (req, res, next) => {
-    try { const value = validateSettings(req.body.settings || req.body); store.setSettings(value); store.addLog({ type: 'settings', actorId: req.user.id, actorName: req.user.displayName, content: 'Discord-koppelingen en rangen bijgewerkt.' }); res.json({ settings: value }); } catch (error) { next(error); }
+    try {
+      const value = validateSettings(req.body.settings || req.body);
+      store.setSettings(value);
+      bot.scheduleRosterRefresh?.();
+      store.addLog({ type: 'settings', actorId: req.user.id, actorName: req.user.displayName, content: 'Discord-koppelingen en rangen bijgewerkt.' });
+      res.json({ settings: value });
+    } catch (error) { next(error); }
   });
   app.get('/api/discord/catalog', guard('settings'), asyncRoute(async (req, res) => res.json(await bot.getCatalog())));
   app.get('/api/personnel/options', guard(), asyncRoute(async (req, res) => {

@@ -57,6 +57,12 @@ Gebruik de bestaande Royal Cars-applicatie in het [Discord Developer Portal](htt
 
 Een promotie mag uitsluitend naar een hoger ingestelde rang en een demotie naar een lagere rang. Koppel bij **Instellingen** het Discord-kanaal voor promoties. Ontslaan verwijdert de geconfigureerde personeelsrollen; de bot verwijdert geen serverleden. Losse, niet ingestelde Discord-rollen blijven behouden. Het portaal verleent nooit automatisch toegang op basis van alleen een Discord-rolnaam.
 
+### Live ledenlijst in Discord
+
+Voer `/ledenlijst` uit in het Discord-kanaal waar het overzicht moet staan. Het vaste Directie-account en leden met **Server beheren** kunnen de lijst plaatsen. De bot werkt hetzelfde bericht bij bij wijzigingen aan leden, rollen of de rangvolgorde in het portaal. De lijst gebruikt de gekoppelde rangen en volgorde van de website, van hoog naar laag.
+
+Gebruik het commando opnieuw om het bestaande bericht te verversen. Wil je de lijst verplaatsen, verwijder dan eerst het oude bericht en voer het commando uit in het nieuwe kanaal. Bij een grote lijst verwijst het bericht voor de overige leden naar het volledige overzicht op de site.
+
 ## Hosting
 
 De Dockerfile start website en Discord-bot in één proces. Gebruik één replica en een blijvend volume op `/data`; zet `DATA_DIR=/data`. De gezondheidstest is `/healthz`.

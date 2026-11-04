@@ -227,6 +227,26 @@ test('database upgrade preserves existing accounts and inherited ranks survive a
   }finally{rmSync(dir,{recursive:true,force:true})}
 });
 
+test('roster message survives restart and stale settings writes', async t => {
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'royalcars-roster-'));
+  const path = join(dir, 'portal.sqlite');
+  const first = { channelId: '555555555555555555', messageId: '666666666666666666' };
+  let store = new Store(path);
+  t.after(() => { store.close(); rmSync(dir, { recursive: true, force: true }); });
+  const staleSettings = store.getSettings();
+  assert.equal(store.getRosterMessage(env.DISCORD_GUILD_ID), null);
+  store.setRosterMessage(env.DISCORD_GUILD_ID, first);
+  store.setSettings({ ...staleSettings, channels: { ...staleSettings.channels, hire: target } });
+  store.close();
+  store = new Store(path);
+  assert.deepEqual(store.getRosterMessage(env.DISCORD_GUILD_ID), first);
+  assert.equal(store.getSettings().channels.hire, target);
+  assert.equal(store.getRosterMessage(member), null);
+});
+
 test('personnel options show only assignable allowlisted extra roles for delegated accounts and refresh group permissions immediately',async t=>{
   const extra='777777777777777777',other='888888888888888888',rank='666666666666666666';
   const service={...bot,getCatalog:async()=>({roles:[{id:rank,name:'Rank',assignable:true},{id:extra,name:'Extra',assignable:true},{id:other,name:'Not allowed',assignable:true}],channels:[]})};
