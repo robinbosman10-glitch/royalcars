@@ -119,6 +119,7 @@ test('ledenlijst posts one persistent message and edits it after a Discord role 
   const pointer = store.getRosterMessage(ID.guild);
   assert.equal(pointer.channelId, ID.channel);
   const message = messages.get(pointer.messageId);
+  assert.equal(message.content, '# Contact Dealers');
   const description = message.embeds[0].description;
   assert.ok(description.includes(`<@${ID.member}>`));
   assert.ok(description.includes(`<@&${ID.high}>`));

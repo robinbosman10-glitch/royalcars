@@ -13,6 +13,7 @@ test('roster follows website rank order and alphabetical names, including empty 
     members: [member('Zara', sales), member('Bram', directie, '100000000000000002'), member('Anna', sales), member('Oud lid', { id: 'deleted' })],
   });
   assert.deepEqual(result.allowedMentions, { parse: [], repliedUser: false });
+  assert.equal(result.content, '# Contact Dealers');
   assert.equal(result.embeds.length, 1);
   const { description } = result.embeds[0];
   assert.match(description, /\*\*3\*\* medewerkers · \*\*3\*\* rangen/);
@@ -40,8 +41,8 @@ test('a full roster fits in one message, reports omitted rows and is determinist
   const second = renderRosterMessage({ ranks, members });
   assert.deepEqual(first, second);
   assert.equal(first.embeds.length, 2);
-  assert.ok(first.embeds.every(embed => embed.description.length <= 4096 && embed.title.length <= 256));
-  const totalLength = first.embeds.reduce((count, embed) => count + embed.title.length + embed.description.length + (embed.footer?.text.length || 0), 0);
+  assert.ok(first.embeds.every(embed => embed.description.length <= 4096 && (embed.title?.length || 0) <= 256));
+  const totalLength = first.embeds.reduce((count, embed) => count + (embed.title?.length || 0) + embed.description.length + (embed.footer?.text.length || 0), 0);
   assert.ok(totalLength <= 6000);
   const all = first.embeds.map(embed => embed.description).join('\n');
   const displayed = (all.match(/^• /gm) || []).length;
