@@ -2,24 +2,24 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { renderRosterMessage } from '../lib/discord-roster.mjs';
 
-const directie = { id: 'directie', name: 'Directie', order: 0 };
+const directie = { id: 'directie', name: 'Directie', order: 0, roleId: '100000000000000001' };
 const sales = { id: 'sales', name: 'Verkoop', order: 1 };
 const intern = { id: 'intern', name: 'Proeftijd', order: 2 };
-const member = (displayName, rank) => ({ displayName, rank });
+const member = (displayName, rank, id) => ({ displayName, rank, id });
 
 test('roster follows website rank order and alphabetical names, including empty ranks', () => {
   const result = renderRosterMessage({
     ranks: [sales, intern, directie],
-    members: [member('Zara', sales), member('Bram', directie), member('Anna', sales), member('Oud lid', { id: 'deleted' })],
+    members: [member('Zara', sales), member('Bram', directie, '100000000000000002'), member('Anna', sales), member('Oud lid', { id: 'deleted' })],
   });
   assert.deepEqual(result.allowedMentions, { parse: [], repliedUser: false });
   assert.equal(result.embeds.length, 1);
   const { description } = result.embeds[0];
   assert.match(description, /\*\*3\*\* medewerkers · \*\*3\*\* rangen/);
-  assert.match(description, /01 · Directie\*\* · 1 lid\n• Bram[\s\S]*02 · Verkoop\*\* · 2 leden\n• Anna\n• Zara[\s\S]*03 · Proeftijd/);
+  assert.match(description, /01 · <@&100000000000000001>\*\* · 1 lid\n• <@100000000000000002>[\s\S]*02 · Verkoop\*\* · 2 leden\n• Anna\n• Zara[\s\S]*03 · Proeftijd/);
   assert.match(description, /Nog geen medewerkers/);
   assert.doesNotMatch(description, /Oud lid/);
-  assert.match(description, /https:\/\/royalcarsadmin\.nl\/#members/);
+  assert.doesNotMatch(description, /Open de live ledenlijst|https?:\/\//);
 });
 
 test('names cannot create mentions or alter the roster formatting', () => {
@@ -49,10 +49,11 @@ test('a full roster fits in one message, reports omitted rows and is determinist
   assert.match(all, new RegExp(`Ingekort:\\*\\* ${displayed} van 501 medewerkers · 1 van 3 rangen volledig`));
   assert.match(all, /Verkoop\*\* · 500 leden \(vervolg\)/);
   assert.doesNotMatch(all, /\p{Surrogate}/u);
+  assert.doesNotMatch(all, /https?:\/\//);
 });
 
-test('the unconfigured roster links to the portal without listing unrelated users', () => {
+test('the unconfigured roster has no portal link or unrelated users', () => {
   const { embeds } = renderRosterMessage();
   assert.match(embeds[0].description, /nog geen personeelsrangen gekoppeld/);
-  assert.match(embeds[0].description, /royalcarsadmin\.nl\/#members/);
+  assert.doesNotMatch(embeds[0].description, /https?:\/\/|<@/);
 });

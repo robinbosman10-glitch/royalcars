@@ -119,7 +119,12 @@ test('ledenlijst posts one persistent message and edits it after a Discord role 
   const pointer = store.getRosterMessage(ID.guild);
   assert.equal(pointer.channelId, ID.channel);
   const message = messages.get(pointer.messageId);
-  assert.match(JSON.stringify(message.embeds), /Voorbeeld/);
+  const description = message.embeds[0].description;
+  assert.ok(description.includes(`<@${ID.member}>`));
+  assert.ok(description.includes(`<@&${ID.high}>`));
+  assert.doesNotMatch(description, /royalcarsadmin\.nl/);
+  assert.deepEqual(message.allowedMentions, { parse: [], repliedUser: false });
+  assert.equal(message.flags, 4096);
   const reply = await runCommand(ID.actor, [32n, 2048n], ID.promoteChannel);
   assert.equal(reply.content, 'De bestaande live ledenlijst is bijgewerkt.');
   assert.deepEqual(store.getRosterMessage(ID.guild), pointer);
