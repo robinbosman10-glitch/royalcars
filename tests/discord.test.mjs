@@ -251,6 +251,8 @@ test('aanwezigheid posts one daily check and counts the last active reaction', {
   t.after(async () => { await service.stop(); db.close(); });
   for (const key of ['getAttendancePost','saveAttendancePost','recordAttendanceReaction','clearAttendanceReactions']) store[key] = db[key].bind(db);
   guild.roles.cache.set(ID.high, { id: ID.high, name: '🚗 | Team Royal Cars' });
+  guild.roles.cache.set(ID.low, { id: ID.low, name: '🦺 | Team Beveiliging' });
+  guild.roles.cache.set(ID.base, { id: ID.base, name: '-=-=-=- 𝗣𝗲𝗿𝘀𝗼𝗻𝗲𝗲𝗹 -=-=-=-' });
   guild.channels.cache.set(ID.promoteChannel, { id: ID.promoteChannel, name: '📜 | afwezigheid', isTextBased: () => true });
   await service.start();
   assert.ok(registeredCommands.some(command => command.name === 'aanwezigheid'));
@@ -270,6 +272,9 @@ test('aanwezigheid posts one daily check and counts the last active reaction', {
   assert.ok(message.content.includes(day.split('-').reverse().map(Number).join('-')));
   assert.ok(message.content.includes('<#' + ID.promoteChannel + '>'));
   assert.ok(message.content.includes('<@&' + ID.high + '>'));
+  assert.ok(message.content.includes('<@&' + ID.low + '>'));
+  assert.ok(message.content.includes('<@&' + ID.base + '>'));
+  assert.deepEqual(message.allowedMentions, { parse: [], repliedUser: false, roles: [ID.high, ID.low, ID.base] });
   assert.deepEqual(message.reactionsAdded, ['✅', '❌']);
   await invoke();
   assert.equal(messages.size, 1);
