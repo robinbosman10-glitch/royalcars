@@ -46,6 +46,7 @@ test('configured base roles cannot silently grant or retain a higher staff rank'
 
 function fixture({ roleIds = [ID.high, ID.base, ID.unrelated], canSend = true, failRemove = null, ownerTarget = false, botPosition = 100, actorPosition = 15, settings = config() } = {}) {
   const messages = new Map(); const mutations = []; const logs = [];
+  let nextMessageId = 100000000000000020n;
   const registeredCommands = [];
   const rosterEdits = new EventEmitter();
   let rosterMessage = null;
@@ -73,7 +74,7 @@ function fixture({ roleIds = [ID.high, ID.base, ID.unrelated], canSend = true, f
       },
     },
     send: async payload => {
-      const id = String(100000000000000020n + BigInt(messages.size));
+      const id = String(nextMessageId++);
       const message = {
         id, channelId: ID.channel, author: { id: ID.bot }, ...payload,
         reactionsAdded: [],
@@ -283,5 +284,14 @@ test('aanwezigheid posts one daily check and counts the last active reaction', {
   react('REMOVE', '❌');
   assert.deepEqual(db.attendanceReport(ID.guild).votes.map(v => v.choice), ['present']);
   react('REMOVE_ALL');
+  assert.equal(db.attendanceReport(ID.guild).votes.length, 0);
+  react('ADD', '✅');
+  messages.delete(message.id);
+  const replacementReply = await invoke();
+  const replacement = [...messages.values()][0];
+  assert.notEqual(replacement.id, message.id);
+  assert.ok(replacementReply.content.endsWith(replacement.id));
+  assert.deepEqual(replacement.reactionsAdded, ['✅', '❌']);
+  assert.deepEqual(db.attendanceReport(ID.guild).days.map(post => post.messageId), [replacement.id]);
   assert.equal(db.attendanceReport(ID.guild).votes.length, 0);
 });
