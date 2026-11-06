@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { stat } from 'node:fs/promises';
 import { Store } from '../lib/store.mjs';
 import { createDiscordService, planRoleChanges } from '../lib/discord.mjs';
 
@@ -243,6 +244,34 @@ test('delegated hiring cannot grant an extra role outside the owner-configured a
   const {service,mutations}=fixture();await service.start();
   await assert.rejects(service.performAction({type:'hire',discordId:ID.member,rankId:'dealer',actorId:'100000000000000099',roleIds:['100000000000000010']}),{code:'EXTRA_ROLE_FORBIDDEN'});
   assert.deepEqual(mutations,[]);await service.stop();
+});
+
+test('opening sends the approved announcement and image only to the fixed channel and role', async t => {
+  const { service, client, guild, messages, registeredCommands } = fixture();
+  const channelId = '1565489120262754524';
+  const roleId = '1189079959722008657';
+  guild.channels.cache.set(channelId, { ...guild.channels.cache.get(ID.channel), id: channelId });
+  guild.roles.cache.set(roleId, { id: roleId, name: 'Royal Cars', mentionable: true });
+  t.after(() => service.stop());
+  await service.start();
+  assert.ok(registeredCommands.some(command => command.name === 'opening'));
+  const invoke = userId => {
+    const { promise, resolve } = Promise.withResolvers();
+    client.emit('interactionCreate', {
+      id: '100000000000000060', isChatInputCommand: () => true, commandName: 'opening',
+      guildId: ID.guild, channelId: ID.channel, user: { id: userId },
+      reply: async value => resolve(value), deferReply: async () => {}, editReply: async value => resolve(value),
+    });
+    return promise;
+  };
+  assert.match((await invoke(ID.member)).content, /Alleen Directie/);
+  assert.equal(messages.size, 0);
+  assert.match((await invoke(ID.owner)).content, new RegExp('/' + channelId + '/'));
+  const [message] = messages.values();
+  assert.ok(message.content.startsWith('<@&' + roleId + '>\n'));
+  assert.deepEqual(message.allowedMentions, { parse: [], repliedUser: false, roles: [roleId] });
+  assert.equal(message.files.length, 1);
+  assert.ok((await stat(message.files[0].attachment)).size > 0);
 });
 
 test('aanwezigheid posts one daily check and counts the last active reaction', { timeout: 7000 }, async t => {
