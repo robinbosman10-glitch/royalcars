@@ -331,6 +331,39 @@ test('sell opens the vehicle form and posts the stored price to the sales channe
   assert.equal(sales[0].enforceNonce, true);
 });
 
+test('publishes the full prices list in the fixed Discord channel without pings', async t => {
+  const { service, guild, messages } = fixture();
+  const channelId = '1565487793692610610';
+  guild.channels.cache.set(channelId, { ...guild.channels.cache.get(ID.channel), id: channelId });
+  t.after(() => service.stop());
+  await service.start();
+
+  await assert.rejects(service.publishPriceList({ vehicles: [] }), { code: 'PRICE_LIST_EMPTY' });
+  assert.equal(messages.size, 0);
+
+  const short = await service.publishPriceList({
+    vehicles: [{ name: 'Porsche 911 @everyone', priceCents: 12500050 }], nonce: 'short-price-list',
+  });
+  const [embedMessage] = messages.values();
+  assert.deepEqual(short, { messageUrl: `https://discord.com/channels/${ID.guild}/${channelId}/${embedMessage.id}`, vehicleCount: 1 });
+  assert.match(embedMessage.embeds[0].description, /Porsche 911 @\u200beveryone · \*\*€\s125\.000,50\*\*/);
+  assert.deepEqual(embedMessage.allowedMentions, { parse: [], repliedUser: false });
+  assert.equal(embedMessage.enforceNonce, true);
+
+  const vehicles = Array.from({ length: 80 }, (_, index) => ({
+    name: `Model ${index + 1} ${'x'.repeat(55)}`, priceCents: 12500050,
+  }));
+  const long = await service.publishPriceList({ vehicles, nonce: 'long-price-list' });
+  const [, attachedMessage] = messages.values();
+  assert.equal(long.vehicleCount, vehicles.length);
+  assert.match(attachedMessage.embeds[0].description, /bijgevoegde bestand/);
+  assert.equal(attachedMessage.files[0].name, 'royal-cars-prijzenlijst.txt');
+  const attachmentLines = attachedMessage.files[0].attachment.toString().split('\n');
+  assert.equal(attachmentLines.length, vehicles.length + 3);
+  assert.match(attachmentLines.at(-1), /^Model 80 /);
+  assert.equal(messages.size, 2);
+});
+
 test('aanwezigheid posts one daily check and counts the last active reaction', { timeout: 7000 }, async t => {
   const { service, store, client, guild, messages, registeredCommands } = fixture();
   const db = new Store();

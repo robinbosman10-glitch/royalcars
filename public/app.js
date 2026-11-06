@@ -100,6 +100,22 @@ document.addEventListener('change', event => {
 icons.car='<path d="M5 17v2m14-2v2M4 10l2-5h12l2 5M5 10h14a2 2 0 0 1 2 2v5H3v-5a2 2 0 0 1 2-2Zm2 3h2m6 0h2"/>';
 const salePriceFormatter = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' });
 
+function priceListPublicationMessage() {
+  const { pending, error, messageUrl } = state.priceListPublication || {};
+  if (pending) return 'Prijzenlijst wordt geplaatst…';
+  if (error) return E(error);
+  if (messageUrl) {
+    const link = /^https:\/\/discord\.com\/channels\/\d+\/\d+\/\d+$/.test(messageUrl)
+      ? ` <a class="text-link" href="${E(messageUrl)}" target="_blank" rel="noopener noreferrer">Bekijk in Discord</a>` : '';
+    return `Prijzenlijst geplaatst.${link}`;
+  }
+  return 'Plaats de actuele autolijst met verkoopprijzen in Discord.';
+}
+
+function priceListDisabled() {
+  return state.preview || state.saleVehicles.length === 0 || state.priceListPublication?.pending;
+}
+
 function salesView() {
   const vehicle = state.saleVehicles.find(item => item.id === state.editSaleVehicleId);
   const price = vehicle ? (vehicle.priceCents / 100).toFixed(2).replace('.', ',') : '';
@@ -117,12 +133,13 @@ function salesView() {
       </div>
     </section>
     <section class="panel">
-      <header class="panel-header"><div><h2>Autolijst <span class="count">${state.saleVehicles.length}</span></h2><p>Beschikbaar in de keuzelijst van /sell.</p></div></header>
+      <header class="panel-header"><div><h2>Autolijst <span class="count">${state.saleVehicles.length}</span></h2><p>Beschikbaar in de keuzelijst van /sell.</p></div><button type="button" class="button small" id="publish-price-list" data-publish-price-list aria-describedby="price-list-publication" ${priceListDisabled() ? 'disabled' : ''}>Maak prijzenlijst</button></header>
       ${state.saleVehicles.length ? state.saleVehicles.map(item => `<div class="account-card sale-vehicle-row">
         <div><strong>${E(item.name)}</strong><small>${E(salePriceFormatter.format(item.priceCents / 100))}</small></div>
         <button class="icon-button" type="button" data-edit-sale-vehicle="${E(item.id)}" aria-label="${E(item.name)} wijzigen" title="Wijzigen" ${disabled}>${I('edit')}</button>
         <button class="icon-button" type="button" data-delete-sale-vehicle="${E(item.id)}" aria-label="${E(item.name)} verwijderen" title="Verwijderen" ${disabled}>${I('trash')}</button>
       </div>`).join('') : '<div class="empty">'+I('car')+'<strong>Nog geen auto’s toegevoegd</strong>Voeg een auto en de verkoopprijs toe om /sell te gebruiken.</div>'}
+      <div class="panel-footer" id="price-list-publication" role="status">${priceListPublicationMessage()}</div>
     </section>
   </div>
   <div class="notice neutral sale-channel-note">${I('discord')}<div>De bot zoekt het kanaal Bij Houden Verkoop. Je kunt het verkoopkanaal ook zelf kiezen bij <a class="text-link" href="#settings">Instellingen</a>.</div></div>`;
@@ -164,9 +181,32 @@ function salesChannelSettings(settings) {
   </section>`;
 }
 
+async function publishPriceList() {
+  if (priceListDisabled()) return;
+  const update = () => {
+    const button = document.getElementById('publish-price-list');
+    if (button) button.disabled = Boolean(priceListDisabled());
+    const status = document.getElementById('price-list-publication');
+    if (status) status.innerHTML = priceListPublicationMessage();
+  };
+  state.priceListPublication = { pending: true };
+  update();
+  try {
+    const { messageUrl } = await api('/api/sale-vehicles/publish-price-list', { method: 'POST' });
+    state.priceListPublication = { messageUrl };
+  } catch (error) {
+    state.priceListPublication = { error: error.message };
+  }
+  update();
+}
+
 document.addEventListener('click', event => {
-  const button = event.target.closest('[data-edit-sale-vehicle], [data-cancel-sale-vehicle], [data-delete-sale-vehicle]');
+  const button = event.target.closest('[data-edit-sale-vehicle], [data-cancel-sale-vehicle], [data-delete-sale-vehicle], [data-publish-price-list]');
   if (!button || !can('sales') || state.preview) return;
+  if (button.hasAttribute('data-publish-price-list')) {
+    void publishPriceList();
+    return;
+  }
   const vehicleId = button.dataset.editSaleVehicle || button.dataset.deleteSaleVehicle;
   if (button.hasAttribute('data-delete-sale-vehicle')) {
     const vehicle = state.saleVehicles.find(item => item.id === vehicleId);

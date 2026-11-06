@@ -122,6 +122,19 @@ export function createApp({ store, bot, env = process.env }) {
     if (!store.deleteSaleVehicle(req.params.id)) throw new HttpError(404, 'Deze auto staat niet meer in de verkooplijst.');
     res.status(204).end();
   });
+  let priceListPublishing = false;
+  app.post('/api/sale-vehicles/publish-price-list', guard('sales'), csrf, asyncRoute(async (req, res) => {
+    if (priceListPublishing) throw new HttpError(409, 'Er wordt al een prijzenlijst geplaatst.');
+    const vehicles = store.listSaleVehicles();
+    if (!vehicles.length) throw new HttpError(400, 'Voeg eerst een auto toe om een prijzenlijst te plaatsen.');
+    priceListPublishing = true;
+    try {
+      const result = await bot.publishPriceList({ vehicles, nonce: randomBytes(12).toString('hex') });
+      res.status(201).json(result);
+    } finally {
+      priceListPublishing = false;
+    }
+  }));
   app.get('/api/members', guard('members'), asyncRoute(async (req, res) => res.json(await bot.getMembers())));
   app.get('/api/logs', guard('logs'), (req, res) => {
     const page = Math.max(1, Math.min(10_000, Number.parseInt(req.query.page, 10) || 1));

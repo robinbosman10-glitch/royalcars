@@ -450,4 +450,27 @@ test('staff cannot use the sale vehicles API even when a stored account lists th
   for (const [method, path] of [['GET', '/api/sale-vehicles'], ['POST', '/api/sale-vehicles'], ['PUT', '/api/sale-vehicles/test'], ['DELETE', '/api/sale-vehicles/test']]) {
     assert.equal((await staff.request(path, { method, headers })).status, 403);
   }
+  assert.equal((await staff.request('/api/sale-vehicles/publish-price-list', { method: 'POST', headers })).status, 403);
+});
+
+test('Directie can publish a price list only from the stored vehicles', async t => {
+  const published = [];
+  const result = { messageUrl: 'https://discord.com/channels/444444444444444444/1565487793692610610/666666666666666666', vehicleCount: 1 };
+  const directie = await harness(t, owner, {
+    ...bot,
+    publishPriceList: async input => { published.push(input); return result; },
+  });
+  const { cookie, data } = await directie.login();
+  const url = '/api/sale-vehicles/publish-price-list';
+  const headers = { Cookie: cookie, 'Content-Type': 'application/json', 'X-CSRF-Token': data.csrfToken };
+  assert.equal((await directie.request(url, { method: 'POST', headers: { Cookie: cookie } })).status, 403);
+  assert.equal((await directie.request(url, { method: 'POST', headers })).status, 400);
+  assert.equal(published.length, 0);
+  const vehicle = directie.store.addSaleVehicle({ name: 'Elegy', priceCents: 12500000 });
+  const response = await directie.request(url, { method: 'POST', headers, body: JSON.stringify({ vehicles: [{ name: 'Other', priceCents: 100 }] }) });
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), result);
+  assert.equal(published.length, 1);
+  assert.deepEqual(published[0].vehicles.map(row => ({ ...row })), [vehicle]);
+  assert.match(published[0].nonce, /^[a-f0-9]{24}$/);
 });
