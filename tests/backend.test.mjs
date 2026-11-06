@@ -395,3 +395,16 @@ test('new managed account saves credentials and rank, logs in directly and retai
   const edited=await h.request('/api/accounts',{method:'POST',headers,body:JSON.stringify({...account,label:'Updated Staff',loginPassword:''})});
   assert.equal(edited.status,200);assert.equal(h.store.getAccount(member).label,'Updated Staff');assert.equal(h.store.getCredential(member).passwordHash,hash);
 });
+
+test('attendance report is only available to Directie', async t => {
+  const directie = await harness(t, owner);
+  const directieLogin = await directie.login();
+  const response = await directie.request('/api/attendance', { headers: { Cookie: directieLogin.cookie } });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { days: [], votes: [] });
+  const medewerker = await harness(t, member);
+  medewerker.store.saveAccount({ id: member, label: 'Staff', permissions: ['dashboard', 'members'], logSourceIds: [], active: true });
+  const medewerkerLogin = await medewerker.login();
+  const denied = await medewerker.request('/api/attendance', { headers: { Cookie: medewerkerLogin.cookie } });
+  assert.equal(denied.status, 403);
+});

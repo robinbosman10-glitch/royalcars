@@ -105,6 +105,9 @@ export function createApp({ store, bot, env = process.env }) {
     const recentActivity = req.access.permissions.includes('logs') ? store.listLogs({ sourceIds: allowedLogSources(req.access), limit: 8 }).logs : [];
     res.json({ stats: { members: data.members.length, serverMembers: bot.status().memberCount || 0, ranks: data.ranks.length, ...store.operationStats() }, recentActivity, bot: bot.status() });
   }));
+  app.get('/api/attendance', guard('attendance'), (req, res) => {
+    res.json(store.attendanceReport(env.DISCORD_GUILD_ID || ''));
+  });
   app.get('/api/members', guard('members'), asyncRoute(async (req, res) => res.json(await bot.getMembers())));
   app.get('/api/logs', guard('logs'), (req, res) => {
     const page = Math.max(1, Math.min(10_000, Number.parseInt(req.query.page, 10) || 1));

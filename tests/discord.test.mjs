@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { Store } from '../lib/store.mjs';
 import { createDiscordService, planRoleChanges } from '../lib/discord.mjs';
 
 const ID = { guild: '100000000000000001', bot: '100000000000000002', member: '100000000000000003', owner: '100000000000000004', high: '100000000000000005', low: '100000000000000006', base: '100000000000000007', unrelated: '100000000000000008', channel: '100000000000000009', promoteChannel: '100000000000000012', actor: '100000000000000013' };
@@ -69,7 +70,8 @@ function fixture({ roleIds = [ID.high, ID.base, ID.unrelated], canSend = true, f
     send: async payload => {
       const id = String(100000000000000020n + BigInt(messages.size));
       const message = {
-        id, author: { id: ID.bot }, ...payload,
+        id, channelId: ID.channel, author: { id: ID.bot }, ...payload,
+        reactionsAdded: [], react: async emoji => message.reactionsAdded.push(emoji),
         edit: async next => {
           Object.assign(message, next);
           rosterEdits.emit('edit', message);
@@ -235,4 +237,46 @@ test('delegated hiring cannot grant an extra role outside the owner-configured a
   const {service,mutations}=fixture();await service.start();
   await assert.rejects(service.performAction({type:'hire',discordId:ID.member,rankId:'dealer',actorId:'100000000000000099',roleIds:['100000000000000010']}),{code:'EXTRA_ROLE_FORBIDDEN'});
   assert.deepEqual(mutations,[]);await service.stop();
+});
+
+test('aanwezigheid posts one daily check and counts the last active reaction', { timeout: 7000 }, async t => {
+  const { service, store, client, guild, messages, registeredCommands } = fixture();
+  const db = new Store();
+  t.after(async () => { await service.stop(); db.close(); });
+  for (const key of ['getAttendancePost','saveAttendancePost','recordAttendanceReaction','clearAttendanceReactions']) store[key] = db[key].bind(db);
+  guild.roles.cache.set(ID.high, { id: ID.high, name: '🚗 | Team Royal Cars' });
+  guild.channels.cache.set(ID.promoteChannel, { id: ID.promoteChannel, name: '📜 | afwezigheid', isTextBased: () => true });
+  await service.start();
+  assert.ok(registeredCommands.some(command => command.name === 'aanwezigheid'));
+  const invoke = () => {
+    const { promise, resolve } = Promise.withResolvers();
+    client.emit('interactionCreate', {
+      isChatInputCommand: () => true, commandName: 'aanwezigheid', guildId: ID.guild,
+      channelId: ID.channel, user: { id: ID.owner },
+      deferReply: async () => {}, editReply: async value => resolve(value),
+    });
+    return promise;
+  };
+  const reply = await invoke();
+  assert.match(reply.content, /^Aanwezigheidscheck: https:/);
+  const message = [...messages.values()][0];
+  const day = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+  assert.ok(message.content.includes(day.split('-').reverse().map(Number).join('-')));
+  assert.ok(message.content.includes('<#' + ID.promoteChannel + '>'));
+  assert.ok(message.content.includes('<@&' + ID.high + '>'));
+  assert.deepEqual(message.reactionsAdded, ['✅', '❌']);
+  await invoke();
+  assert.equal(messages.size, 1);
+  const react = (event, emoji, userId = ID.member) => client.emit('raw', {
+    t: 'MESSAGE_REACTION_' + event, d: { guild_id: ID.guild, message_id: message.id, user_id: userId, emoji: { name: emoji }, member: { nick: 'Voorbeeld' } },
+  });
+  react('ADD', '✅', ID.bot);
+  react('ADD', '✅');
+  react('ADD', '❌');
+  react('ADD', '✅'); // Duplicate delivery must not change the winner.
+  assert.deepEqual(db.attendanceReport(ID.guild).votes.map(v => v.choice), ['absent']);
+  react('REMOVE', '❌');
+  assert.deepEqual(db.attendanceReport(ID.guild).votes.map(v => v.choice), ['present']);
+  react('REMOVE_ALL');
+  assert.equal(db.attendanceReport(ID.guild).votes.length, 0);
 });
