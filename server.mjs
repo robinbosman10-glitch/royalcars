@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname } from 'node:path';
 import { Store, SQLiteSessionStore } from './lib/store.mjs';
 import { bootstrapOwner, DUMMY_HASH, isPasswordHash, hashPassword, verifyPassword, validateUsername, validatePassword } from './lib/passwords.mjs';
-import { HttpError, DISCORD_ID, PERSONNEL_ACTIONS, accessFor, allowedLogSources, safeEqual, csrfToken, validateSettings, validateAccount, validateGroup, validateAction, createOperationRunner } from './lib/security.mjs';
+import { HttpError, DISCORD_ID, PERSONNEL_ACTIONS, accessFor, allowedLogSources, safeEqual, csrfToken, validateSettings, validateAccount, validateGroup, validateAction, validateSaleVehicle, createOperationRunner } from './lib/security.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 export function configuration(env, store) {
@@ -108,6 +108,20 @@ export function createApp({ store, bot, env = process.env }) {
   app.get('/api/attendance', guard('attendance'), (req, res) => {
     res.json(store.attendanceReport(env.DISCORD_GUILD_ID || ''));
   });
+  app.get('/api/sale-vehicles', guard('sales'), (req, res) => res.json({ vehicles: store.listSaleVehicles() }));
+  app.post('/api/sale-vehicles', guard('sales'), csrf, (req, res) => {
+    const vehicle = store.addSaleVehicle(validateSaleVehicle(req.body));
+    res.status(201).json({ vehicle });
+  });
+  app.put('/api/sale-vehicles/:id', guard('sales'), csrf, (req, res) => {
+    const vehicle = store.updateSaleVehicle(req.params.id, validateSaleVehicle(req.body));
+    if (!vehicle) throw new HttpError(404, 'Deze auto staat niet meer in de verkooplijst.');
+    res.json({ vehicle });
+  });
+  app.delete('/api/sale-vehicles/:id', guard('sales'), csrf, (req, res) => {
+    if (!store.deleteSaleVehicle(req.params.id)) throw new HttpError(404, 'Deze auto staat niet meer in de verkooplijst.');
+    res.status(204).end();
+  });
   app.get('/api/members', guard('members'), asyncRoute(async (req, res) => res.json(await bot.getMembers())));
   app.get('/api/logs', guard('logs'), (req, res) => {
     const page = Math.max(1, Math.min(10_000, Number.parseInt(req.query.page, 10) || 1));
@@ -157,7 +171,9 @@ export function createApp({ store, bot, env = process.env }) {
   });
   app.put('/api/settings', guard('settings'), csrf, (req, res, next) => {
     try {
-      const value = validateSettings(req.body.settings || req.body);
+      const input = req.body?.settings ?? req.body;
+      const value = validateSettings(input);
+      if (input.salesChannelId === undefined) value.salesChannelId = store.getSettings().salesChannelId;
       store.setSettings(value);
       bot.scheduleRosterRefresh?.();
       store.addLog({ type: 'settings', actorId: req.user.id, actorName: req.user.displayName, content: 'Discord-koppelingen en rangen bijgewerkt.' });

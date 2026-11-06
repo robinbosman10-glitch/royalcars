@@ -274,6 +274,63 @@ test('opening sends the approved announcement and image only to the fixed channe
   assert.ok((await stat(message.files[0].attachment)).size > 0);
 });
 
+test('sell opens the vehicle form and posts the stored price to the sales channel only', async t => {
+  const { service, client, guild, store, registeredCommands } = fixture();
+  const sales = [];
+  guild.channels.cache.set(ID.promoteChannel, {
+    ...guild.channels.cache.get(ID.promoteChannel), name: '💰・𝗕𝗶𝗷-𝗛𝗼𝘂𝗱𝗲𝗻・Verkoop',
+    send: async payload => { sales.push(payload); },
+  });
+  const vehicles = Array.from({ length: 26 }, (_, index) => ({
+    id: 'vehicle-' + index, name: 'Model ' + index, priceCents: 5750050,
+  }));
+  store.listSaleVehicles = () => vehicles;
+  store.getSaleVehicle = id => vehicles.find(vehicle => vehicle.id === id);
+  t.after(() => service.stop());
+  await service.start();
+  assert.ok(registeredCommands.find(command => command.name === 'sell').options[0].autocomplete);
+
+  const invoke = input => {
+    const { promise, resolve } = Promise.withResolvers();
+    const interaction = {
+      id: '100000000000000061', guildId: ID.guild, channelId: ID.channel, user: { id: ID.member }, commandName: 'sell',
+      showModal: async value => resolve(value), respond: async value => resolve(value),
+      reply: async value => resolve(value), editReply: async value => resolve(value),
+      deferReply: async () => { interaction.deferred = true; },
+      ...input,
+    };
+    client.emit('interactionCreate', interaction);
+    return promise;
+  };
+  const command = { isChatInputCommand: () => true, options: { getString: () => null } };
+  assert.match((await invoke({ ...command, user: { id: ID.unrelated } })).content, /Alleen medewerkers/);
+  const modal = await invoke(command);
+  assert.equal(modal.components[0].component.options.length, 25);
+  assert.equal(modal.components[1].component.custom_id, 'sale-buyer');
+  const autocomplete = await invoke({ isAutocomplete: () => true, options: { getFocused: () => 'model 25' } });
+  assert.deepEqual(autocomplete, [{ name: 'Model 25', value: 'vehicle-25' }]);
+  const selectedModal = await invoke({ ...command, options: { getString: () => 'vehicle-25' } });
+  const [selection] = selectedModal.components[0].component.options;
+  assert.equal(selection.default, true);
+  const submit = {
+    isModalSubmit: () => true, customId: modal.custom_id,
+    fields: { getTextInputValue: () => ' Test *Koper* @everyone ', getStringSelectValues: () => [selection.value] },
+  };
+  assert.match((await invoke({ ...submit, member: { roles: [] } })).content, /Alleen medewerkers/);
+  assert.equal(sales.length, 0);
+  vehicles[25].priceCents++;
+  assert.match((await invoke(submit)).content, /gewijzigd/);
+  assert.equal(sales.length, 0);
+  vehicles[25].priceCents--;
+  assert.match(await invoke(submit), /verkoop is vastgelegd/);
+  assert.equal(sales.length, 1);
+  assert.match(sales[0].content, /\*\*Auto:\*\* Model 25/);
+  assert.match(sales[0].content, /Test \\\*Koper\\\* @\u200beveryone/);
+  assert.match(sales[0].content, /57\.500,50/);
+  assert.deepEqual(sales[0].allowedMentions, { parse: [], repliedUser: false });
+  assert.equal(sales[0].enforceNonce, true);
+});
+
 test('aanwezigheid posts one daily check and counts the last active reaction', { timeout: 7000 }, async t => {
   const { service, store, client, guild, messages, registeredCommands } = fixture();
   const db = new Store();

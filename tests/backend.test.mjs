@@ -408,3 +408,46 @@ test('attendance report is only available to Directie', async t => {
   const denied = await medewerker.request('/api/attendance', { headers: { Cookie: medewerkerLogin.cookie } });
   assert.equal(denied.status, 403);
 });
+
+test('Directie can manage sale vehicles and change the sales channel', async t => {
+  const directie = await harness(t, owner);
+  const login = await directie.login();
+  const headers = { Cookie: login.cookie, 'Content-Type': 'application/json', 'X-CSRF-Token': login.data.csrfToken };
+  const url = '/api/sale-vehicles';
+  const request = (method, path, body) => directie.request(path, { method, headers, body: JSON.stringify(body) });
+  assert.ok(login.data.permissions.includes('sales'));
+  assert.equal((await directie.request(url)).status, 401);
+  assert.equal((await directie.request(url, { method: 'POST', headers: { Cookie: login.cookie } })).status, 403);
+  assert.equal((await request('POST', url, { name: 'Elegy', priceCents: 25.5 })).status, 400);
+  assert.equal((await request('POST', url, { name: 'Elegy', priceCents: 0 })).status, 400);
+  const created = await request('POST', url, { name: '  Elegy  Retro  ', priceCents: 2500000 });
+  assert.equal(created.status, 201);
+  const { vehicle } = await created.json();
+  assert.deepEqual(vehicle, { id: vehicle.id, name: 'Elegy Retro', priceCents: 2500000 });
+  const edit = { name: 'Elegy Retro', priceCents: 3000050 };
+  assert.equal((await request('PUT', url + '/' + vehicle.id, edit)).status, 200);
+  assert.deepEqual(await (await request('GET', url)).json(), { vehicles: [{ id: vehicle.id, ...edit }] });
+  assert.equal((await request('DELETE', url + '/' + vehicle.id)).status, 204);
+  assert.equal((await request('PUT', url + '/' + vehicle.id, edit)).status, 404);
+  assert.deepEqual(await (await request('GET', url)).json(), { vehicles: [] });
+  const { salesChannelId, ...settings } = directie.store.getSettings();
+  assert.equal(salesChannelId, '');
+  const validChannelId = '1568248650533175377';
+  assert.equal((await request('PUT', '/api/settings', { ...settings, salesChannelId: 'verkoop' })).status, 400);
+  assert.equal((await request('PUT', '/api/settings', { ...settings, salesChannelId: validChannelId })).status, 200);
+  assert.equal((await request('PUT', '/api/settings', settings)).status, 200);
+  assert.equal(directie.store.getSettings().salesChannelId, validChannelId);
+  assert.equal((await request('PUT', '/api/settings', { ...settings, salesChannelId: '' })).status, 200);
+  assert.equal(directie.store.getSettings().salesChannelId, '');
+});
+
+test('staff cannot use the sale vehicles API even when a stored account lists the permission', async t => {
+  const staff = await harness(t, member);
+  staff.store.saveAccount({ id: member, label: 'Staff', permissions: ['sales'], logSourceIds: [], active: true });
+  const login = await staff.login();
+  assert.ok(!login.data.permissions.includes('sales'));
+  const headers = { Cookie: login.cookie, 'X-CSRF-Token': login.data.csrfToken };
+  for (const [method, path] of [['GET', '/api/sale-vehicles'], ['POST', '/api/sale-vehicles'], ['PUT', '/api/sale-vehicles/test'], ['DELETE', '/api/sale-vehicles/test']]) {
+    assert.equal((await staff.request(path, { method, headers })).status, 403);
+  }
+});

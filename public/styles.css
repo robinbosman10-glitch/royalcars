@@ -123,3 +123,7 @@ body::after{content:'';position:fixed;inset:0;background:linear-gradient(90deg,#
 .attendance-rank th{background:#e3425118;border-inline-start:3px solid #e34251;font-size:14px}
 .attendance-count{display:inline-block;min-width:32px;text-align:center;padding:3px 8px;border-radius:8px;font-weight:700}.attendance-count.present{background:#15803d25;color:var(--text)}.attendance-count.absent{background:#dc26262b;color:var(--text)}
 @media(max-width:600px){.attendance-stats{gap:8px}.attendance-stat{padding:10px;font-size:11px}.attendance-stat strong{font-size:23px}.attendance-table th,.attendance-table td{padding:8px}}
+
+.sale-vehicle-row>div:first-child{flex:1;min-width:0;overflow-wrap:anywhere}
+.sale-vehicle-row small{display:block;margin-top:4px;color:var(--muted)}
+.sale-channel-note{margin-top:20px}
