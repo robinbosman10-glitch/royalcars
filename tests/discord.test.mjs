@@ -60,6 +60,11 @@ function fixture({ roleIds = [ID.high, ID.base, ID.unrelated], canSend = true, f
     isTextBased: () => true, isThread: () => false,
     permissionsFor: () => ({ has: () => canSend }),
     messages: {
+      react: async (id, emoji) => {
+        const message = messages.get(id);
+        if (!message) throw Object.assign(new Error('Unknown Message'), { code: 10008 });
+        if (!message.reactionsAdded.includes(emoji)) message.reactionsAdded.push(emoji);
+      },
       fetch: async options => {
         if (!options?.message) return messages;
         const message = messages.get(options.message);
@@ -71,7 +76,7 @@ function fixture({ roleIds = [ID.high, ID.base, ID.unrelated], canSend = true, f
       const id = String(100000000000000020n + BigInt(messages.size));
       const message = {
         id, channelId: ID.channel, author: { id: ID.bot }, ...payload,
-        reactionsAdded: [], react: async emoji => message.reactionsAdded.push(emoji),
+        reactionsAdded: [],
         edit: async next => {
           Object.assign(message, next);
           rosterEdits.emit('edit', message);
