@@ -120,5 +120,6 @@ body::after{content:'';position:fixed;inset:0;background:linear-gradient(90deg,#
 .attendance-stat{display:grid;gap:8px;padding:20px}.attendance-stat span,.attendance-table small{color:var(--muted)}.attendance-stat strong{font-size:32px;line-height:1.1}
 .attendance-filters{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:18px}.attendance-filters label{display:grid;gap:6px;min-width:160px;flex:1}
 .attendance-table{overflow-x:auto}.attendance-table table{width:100%;border-collapse:collapse;text-align:left}.attendance-table th,.attendance-table td{padding:12px;border-bottom:1px solid var(--line);white-space:nowrap}.attendance-table small{display:block;font-size:11px}
+.attendance-rank th{background:#e3425118;border-inline-start:3px solid #e34251;font-size:14px}
 .attendance-count{display:inline-block;min-width:32px;text-align:center;padding:3px 8px;border-radius:8px;font-weight:700}.attendance-count.present{background:#15803d25;color:var(--text)}.attendance-count.absent{background:#dc26262b;color:var(--text)}
 @media(max-width:600px){.attendance-stats{gap:8px}.attendance-stat{padding:10px;font-size:11px}.attendance-stat strong{font-size:23px}.attendance-table th,.attendance-table td{padding:8px}}
