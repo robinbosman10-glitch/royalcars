@@ -211,7 +211,10 @@ export function createApp({ store, bot, env = process.env }) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { createDiscordService } = await import('./lib/discord.mjs');
-  const store = new Store(process.env.DATABASE_PATH || join(process.env.DATA_DIR || join(ROOT, 'data'), 'royalcars.sqlite'));
+  const configuredSalesChannel = process.env.DISCORD_SALES_CHANNEL_ID || '';
+  const store = new Store(process.env.DATABASE_PATH || join(process.env.DATA_DIR || join(ROOT, 'data'), 'royalcars.sqlite'), {
+    defaultSalesChannelId: DISCORD_ID.test(configuredSalesChannel) ? configuredSalesChannel : '',
+  });
   const bot = createDiscordService({ store, onChange: () => {} });
   const app = createApp({ store, bot });
   const portArgument = process.argv.indexOf('--port');
