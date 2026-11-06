@@ -248,7 +248,7 @@ test('delegated hiring cannot grant an extra role outside the owner-configured a
 
 test('opening sends the approved announcement and image only to the fixed channel and role', async t => {
   const { service, client, guild, messages, registeredCommands } = fixture();
-  const channelId = '1565489120262754524';
+  const channelId = '1568248650533175377';
   const roleId = '1189079959722008657';
   guild.channels.cache.set(channelId, { ...guild.channels.cache.get(ID.channel), id: channelId });
   guild.roles.cache.set(roleId, { id: roleId, name: 'Royal Cars', mentionable: true });
